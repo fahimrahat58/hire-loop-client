@@ -31,6 +31,9 @@ export function Navbar() {
         <Link href="#" className="transition hover:text-white">
           Pricing
         </Link>
+        <Link href="/dashboard" className="transition hover:text-white">
+          Dashboard
+        </Link>
       </nav>
 
       <div className="flex items-center gap-4">
