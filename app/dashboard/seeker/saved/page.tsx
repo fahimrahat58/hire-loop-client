@@ -1,18 +1,28 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   Bookmark,
   Building2,
   CalendarClock,
-  CheckCircle2,
   DollarSign,
   MapPin,
   Search,
   Trash2,
 } from "lucide-react"
-import { savedJobs, type SavedJob } from "@/app/lib/dashboard-data"
+import { useJobs } from "@/hooks/use-jobs"
+import {
+  getJobCategory,
+  getJobDate,
+  getJobStatus,
+  type ApiJob,
+} from "@/app/lib/jobs-api"
+import {
+  getSavedJobs,
+  onSavedJobsChange,
+  removeSavedJob,
+} from "@/app/lib/saved-jobs"
 import {
   Avatar,
   DashboardCard,
@@ -25,34 +35,51 @@ import {
 } from "@/components/dashboard/ui"
 import { cn } from "@/lib/utils"
 
-const categories = ["All Saved", "Design", "Engineering", "Product"]
-
 export default function SeekerSavedJobsPage() {
-  const [jobs, setJobs] = useState<SavedJob[]>(savedJobs)
+  const { jobs: allJobs, loading, error, reload } = useJobs()
+
+  const [savedEntries, setSavedEntries] = useState(getSavedJobs)
   const [query, setQuery] = useState("")
   const [category, setCategory] = useState("All Saved")
   const [sort, setSort] = useState<"recent" | "oldest">("recent")
-  const [applied, setApplied] = useState<string[]>([])
+
+  useEffect(() => {
+    const sync = () => setSavedEntries(getSavedJobs())
+
+    sync()
+
+    return onSavedJobsChange(sync)
+  }, [])
+
+  const savedJobs = useMemo(() => {
+    const ids = new Set(savedEntries.map((entry) => entry.id))
+
+    return allJobs.filter((job) => ids.has(job._id))
+  }, [allJobs, savedEntries])
+
+  const categories = useMemo(
+    () => ["All Saved", ...new Set(savedJobs.map(getJobCategory))],
+    [savedJobs]
+  )
 
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase()
-    const list = jobs.filter((job) => {
-      const matchesCategory =
-        category === "All Saved" || job.category === category
-      const matchesQuery =
-        !term ||
-        job.title.toLowerCase().includes(term) ||
-        job.company.toLowerCase().includes(term) ||
-        job.location.toLowerCase().includes(term)
 
-      return matchesCategory && matchesQuery
-    })
+    const list = savedJobs.filter(
+      (job) =>
+        (category === "All Saved" || getJobCategory(job) === category) &&
+        (!term ||
+          job.title.toLowerCase().includes(term) ||
+          job.company.toLowerCase().includes(term) ||
+          job.location.toLowerCase().includes(term))
+    )
 
     return sort === "oldest" ? [...list].reverse() : list
-  }, [jobs, query, category, sort])
+  }, [savedJobs, query, category, sort])
 
   const remove = (id: string) => {
-    setJobs((current) => current.filter((job) => job.id !== id))
+    removeSavedJob(id)
+    setSavedEntries(getSavedJobs())
   }
 
   return (
@@ -68,10 +95,18 @@ export default function SeekerSavedJobsPage() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:max-w-xl">
-        <StatCard label="Total Saved" value="24" icon={Bookmark} accent="violet" />
         <StatCard
-          label="Closing Soon"
-          value="3"
+          label="Total Saved"
+          value={String(savedEntries.length)}
+          icon={Bookmark}
+          accent="violet"
+        />
+
+        <StatCard
+          label="Available Saved Jobs"
+          value={String(
+            savedJobs.filter((job) => getJobStatus(job) === "Active").length
+          )}
           icon={CalendarClock}
           accent="amber"
         />
@@ -81,10 +116,11 @@ export default function SeekerSavedJobsPage() {
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="relative w-full xl:max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#6e6e78]" />
+
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search saved jobs..."
               className={cn(inputClass, "pl-9")}
             />
@@ -103,21 +139,22 @@ export default function SeekerSavedJobsPage() {
                     : "border-white/10 bg-[#1a1a1f] text-[#a0a0ab] hover:border-white/20 hover:text-white"
                 )}
               >
-                {item}
-                {item !== "All Saved"
-                  ? ` (${jobs.filter((job) => job.category === item).length})`
-                  : ` (${jobs.length})`}
+                {item} (
+                {item === "All Saved"
+                  ? savedJobs.length
+                  : savedJobs.filter((job) => getJobCategory(job) === item)
+                      .length}
+                )
               </button>
             ))}
           </div>
 
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[#6e6e78]">Sort by:</span>
+
             <select
               value={sort}
-              onChange={(event) =>
-                setSort(event.target.value as "recent" | "oldest")
-              }
+              onChange={(e) => setSort(e.target.value as "recent" | "oldest")}
               className="rounded-lg border border-white/10 bg-[#0f0f13] px-2.5 py-1.5 text-[11px] text-[#d4d4d8] outline-none focus:border-[#5c53fe]"
             >
               <option value="recent">Recently Saved</option>
@@ -127,111 +164,102 @@ export default function SeekerSavedJobsPage() {
         </div>
       </DashboardCard>
 
-      {visible.length > 0 ? (
+      {loading ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          {visible.map((job) => {
-            const hasApplied = applied.includes(job.id)
+          {[1, 2, 3, 4].map((n) => (
+            <div
+              key={n}
+              className="h-52 animate-pulse rounded-xl bg-white/[0.04]"
+            />
+          ))}
+        </div>
+      ) : error ? (
+        <DashboardCard>
+          <EmptyState
+            title="Unable to load saved jobs"
+            description={error}
+            action={
+              <button onClick={() => void reload()} className={primaryButton}>
+                Try again
+              </button>
+            }
+          />
+        </DashboardCard>
+      ) : visible.length ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          {visible.map((job: ApiJob) => (
+            <DashboardCard
+              key={job._id}
+              className={cn(
+                "flex flex-col p-5",
+                getJobStatus(job) === "Closed" && "opacity-70"
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <Avatar name={job.company} size="md" />
 
-            return (
-              <DashboardCard
-                key={job.id}
-                className={cn("flex flex-col p-5", job.closed && "opacity-70")}
-              >
-                <div className="flex items-start gap-3">
-                  <Avatar name={job.company} size="md" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-semibold tracking-[0.12em] text-[#6e6e78] uppercase">
-                          {job.company}
-                        </p>
-                        <h2 className="mt-0.5 truncate text-base font-semibold text-[#ededef]">
-                          {job.title}
-                        </h2>
-                      </div>
-                      {job.closing ? (
-                        <span
-                          className={cn(
-                            "shrink-0 rounded-full border px-2 py-0.5 text-[10px]",
-                            job.closed
-                              ? "border-white/10 bg-white/[0.06] text-[#a0a0ab]"
-                              : "border-[#f59e0b]/30 bg-[#f59e0b]/10 text-[#fcd34d]"
-                          )}
-                        >
-                          {job.closing}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-semibold tracking-[0.12em] text-[#6e6e78] uppercase">
+                    {job.company}
+                  </p>
+
+                  <h2 className="mt-0.5 truncate text-base font-semibold text-[#ededef]">
+                    {job.title}
+                  </h2>
                 </div>
+              </div>
 
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-[#7c7c86]">
-                  <span className="inline-flex items-center gap-1">
-                    <MapPin className="size-3" /> {job.location}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <DollarSign className="size-3" /> {job.salary}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Building2 className="size-3" /> {job.category}
-                  </span>
-                </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-[#7c7c86]">
+                <span className="inline-flex items-center gap-1">
+                  <MapPin className="size-3" />
+                  {job.location}
+                </span>
 
-                <p className="mt-3 text-[11px] text-[#6e6e78]">{job.savedAt}</p>
+                <span className="inline-flex items-center gap-1">
+                  <DollarSign className="size-3" />
+                  {job.salary || "Not specified"}
+                </span>
 
-                <div className="mt-auto flex items-center gap-2 pt-5">
-                  {job.closed ? (
-                    <button
-                      type="button"
-                      disabled
-                      className={cn(primaryButton, "flex-1")}
-                    >
-                      Position closed
-                    </button>
-                  ) : job.draft ? (
-                    <Link
-                      href="/dashboard/seeker/jobs"
-                      className={cn(primaryButton, "flex-1")}
-                    >
-                      <CheckCircle2 className="size-3.5" />
-                      Continue application
-                    </Link>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setApplied((current) =>
-                          current.includes(job.id)
-                            ? current
-                            : [...current, job.id]
-                        )
-                      }
-                      className={cn(primaryButton, "flex-1")}
-                    >
-                      {hasApplied ? (
-                        <>
-                          <CheckCircle2 className="size-3.5" />
-                          Applied
-                        </>
-                      ) : (
-                        "Apply now"
-                      )}
-                    </button>
-                  )}
+                <span className="inline-flex items-center gap-1">
+                  <Building2 className="size-3" />
+                  {getJobCategory(job)}
+                </span>
+              </div>
 
+              <p className="mt-3 text-[11px] text-[#6e6e78]">
+                Posted {getJobDate(job)}
+              </p>
+
+              <div className="mt-auto flex items-center gap-2 pt-5">
+                {getJobStatus(job) === "Closed" ? (
                   <button
                     type="button"
-                    onClick={() => remove(job.id)}
-                    className={secondaryButton}
-                    aria-label={`Remove ${job.title} from saved jobs`}
+                    disabled
+                    className={cn(primaryButton, "flex-1")}
                   >
-                    <Trash2 className="size-3.5" />
-                    Remove
+                    Position closed
                   </button>
-                </div>
-              </DashboardCard>
-            )
-          })}
+                ) : (
+                  <Link
+                    href={`/dashboard/jobs/${job._id}`}
+                    className={cn(primaryButton, "flex-1")}
+                  >
+                    View job
+                  </Link>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => remove(job._id)}
+                  className={secondaryButton}
+                  aria-label={`Remove ${job.title} from saved jobs`}
+                >
+                  <Trash2 className="size-3.5" />
+                  Remove
+                </button>
+              </div>
+            </DashboardCard>
+          ))}
         </div>
       ) : (
         <DashboardCard>
@@ -249,11 +277,8 @@ export default function SeekerSavedJobsPage() {
 
       <div className="flex items-center justify-between gap-3 text-[11px] text-[#6e6e78]">
         <span>
-          Showing {visible.length} of 24 bookmarks · 2 drafts saved
+          Showing {visible.length} of {savedEntries.length} saved bookmarks
         </span>
-        <button type="button" className={secondaryButton}>
-          Load more
-        </button>
       </div>
     </div>
   )

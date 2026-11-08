@@ -22,7 +22,7 @@ export function Navbar() {
       </Link>
 
       <nav className="hidden items-center gap-9 text-sm font-medium text-gray-200 md:flex">
-        <Link href="#" className="transition hover:text-white">
+        <Link href="/jobs" className="transition hover:text-white">
           Browse Jobs
         </Link>
         <Link href="#" className="transition hover:text-white">

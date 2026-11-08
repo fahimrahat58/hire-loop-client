@@ -6,12 +6,23 @@ import {
   Eye,
   FileDown,
   Search,
-  Timer,
   TrendingUp,
   Users,
   X,
+  Loader2,
 } from "lucide-react"
-import { adminJobRows, type AdminJob } from "@/app/lib/dashboard-data"
+import { useJobs } from "@/hooks/use-jobs"
+import { useJobFeedback } from "@/hooks/use-job-feedback"
+import {
+  deleteJob,
+  getJobCategory,
+  getJobDate,
+  getJobStatus,
+  getJobType,
+  getJobsErrorMessage,
+  type ApiJob,
+} from "@/app/lib/jobs-api"
+import { forgetJobOwner } from "@/app/lib/job-ownership"
 import {
   Avatar,
   DashboardCard,
@@ -30,32 +41,60 @@ import {
 import { cn } from "@/lib/utils"
 
 export default function AdminJobsPage() {
-  const [rows, setRows] = useState<AdminJob[]>(adminJobRows)
+  const { jobs: rows, loading, error, reload, user } = useJobs()
+  const { notify, Toast } = useJobFeedback()
+
   const [query, setQuery] = useState("")
   const [status, setStatus] = useState("All Statuses")
   const [category, setCategory] = useState("All Categories")
-  const [viewJob, setViewJob] = useState<AdminJob | null>(null)
+  const [viewJob, setViewJob] = useState<ApiJob | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const canManageAllJobs = user.role === "admin"
 
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase()
 
-    return rows.filter((job) => {
-      const matchesStatus = status === "All Statuses" || job.status === status
-      const matchesCategory =
-        category === "All Categories" || job.category === category
-      const matchesQuery =
-        !term ||
-        job.title.toLowerCase().includes(term) ||
-        job.company.toLowerCase().includes(term)
-
-      return matchesStatus && matchesCategory && matchesQuery
-    })
+    return rows.filter(
+      (job) =>
+        (status === "All Statuses" || getJobStatus(job) === status) &&
+        (category === "All Categories" || getJobCategory(job) === category) &&
+        (!term ||
+          job.title.toLowerCase().includes(term) ||
+          job.company.toLowerCase().includes(term))
+    )
   }, [rows, query, status, category])
 
-  const remove = (job: AdminJob) => {
-    if (!window.confirm(`Remove "${job.title}" from HireLoop?`)) return
-    setRows((current) => current.filter((item) => item.id !== job.id))
-    setViewJob(null)
+  const remove = async (job: ApiJob) => {
+    if (user.role !== "admin") {
+      notify("error", "Only admins can remove any job listing.")
+      return
+    }
+
+    setBusyId(job._id)
+
+    try {
+      await deleteJob(job._id, { user })
+      forgetJobOwner(job._id)
+      setViewJob(null)
+      await reload({ silent: true })
+      notify("success", "Job listing removed successfully.")
+    } catch (err) {
+      notify("error", getJobsErrorMessage(err))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  if (!loading && !canManageAllJobs) {
+    return (
+      <DashboardCard>
+        <EmptyState
+          title="Admin access required"
+          description="Only administrators can manage all job listings."
+        />
+      </DashboardCard>
+    )
   }
 
   return (
@@ -64,7 +103,11 @@ export default function AdminJobsPage() {
         title="Manage Jobs"
         description="Oversee all active listings and historical job posts across the platform."
         actions={
-          <button type="button" onClick={() => window.print()} className={secondaryButton}>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className={secondaryButton}
+          >
             <FileDown className="size-3.5" />
             Export list
           </button>
@@ -77,44 +120,67 @@ export default function AdminJobsPage() {
           <input
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by job title or company..."
             className={cn(inputClass, "pl-9")}
           />
         </div>
+
         <div className="flex flex-wrap gap-2">
           <select
             value={status}
-            onChange={(event) => setStatus(event.target.value)}
+            onChange={(e) => setStatus(e.target.value)}
             className="rounded-lg border border-white/10 bg-[#0f0f13] px-3 py-2.5 text-xs text-[#d4d4d8] outline-none focus:border-[#5c53fe]"
           >
             <option>All Statuses</option>
             <option>Active</option>
             <option>Closed</option>
+            <option>Draft</option>
           </select>
+
           <select
             value={category}
-            onChange={(event) => setCategory(event.target.value)}
+            onChange={(e) => setCategory(e.target.value)}
             className="rounded-lg border border-white/10 bg-[#0f0f13] px-3 py-2.5 text-xs text-[#d4d4d8] outline-none focus:border-[#5c53fe]"
           >
             <option>All Categories</option>
-            <option>Design</option>
-            <option>Engineering</option>
-            <option>Marketing</option>
+            {Array.from(new Set(rows.map(getJobCategory))).map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </div>
+
         <div className="flex items-center gap-1 rounded-lg border border-white/[0.07] bg-[#141418] p-1 lg:ml-auto">
           <span className="rounded-md bg-[#232327] px-3 py-1.5 text-[11px] font-medium text-[#f4f4f5]">
-            Active (128)
+            Active ({rows.filter((j) => getJobStatus(j) === "Active").length})
           </span>
           <span className="px-3 py-1.5 text-[11px] text-[#a0a0ab]">
-            Closed (45)
+            Closed ({rows.filter((j) => getJobStatus(j) === "Closed").length})
           </span>
         </div>
       </div>
 
       <DashboardCard className="overflow-hidden">
-        {visible.length > 0 ? (
+        {loading ? (
+          <div className="space-y-3 p-5">
+            {[1, 2, 3, 4].map((n) => (
+              <div
+                key={n}
+                className="h-12 animate-pulse rounded-lg bg-white/[0.06]"
+              />
+            ))}
+          </div>
+        ) : error ? (
+          <EmptyState
+            title="Unable to load jobs"
+            description={error}
+            action={
+              <button onClick={() => void reload()} className={primaryButton}>
+                Try again
+              </button>
+            }
+          />
+        ) : visible.length ? (
           <TableShell>
             <thead>
               <tr>
@@ -127,25 +193,31 @@ export default function AdminJobsPage() {
                 <Th className="text-right">Actions</Th>
               </tr>
             </thead>
+
             <tbody>
               {visible.map((job) => (
-                <tr key={job.id} className="hover:bg-white/[0.02]">
+                <tr key={job._id} className="hover:bg-white/[0.02]">
                   <Td>
                     <p className="font-medium text-[#ededef]">{job.title}</p>
-                    <p className="text-[11px] text-[#6e6e78]">Ref: {job.ref}</p>
+                    <p className="text-[11px] text-[#6e6e78]">
+                      Ref: {job._id.slice(-6).toUpperCase()}
+                    </p>
                   </Td>
+
                   <Td>
                     <div className="flex items-center gap-2">
                       <Avatar name={job.company} size="sm" />
                       <span className="text-[#d4d4d8]">{job.company}</span>
                     </div>
                   </Td>
-                  <Td>{job.category}</Td>
-                  <Td>{job.type}</Td>
-                  <Td>{job.posted}</Td>
+
+                  <Td>{getJobCategory(job)}</Td>
+                  <Td>{getJobType(job)}</Td>
+                  <Td>{getJobDate(job)}</Td>
                   <Td>
-                    <StatusBadge status={job.status} />
+                    <StatusBadge status={getJobStatus(job)} />
                   </Td>
+
                   <Td>
                     <div className="flex items-center justify-end gap-1">
                       <button
@@ -156,12 +228,18 @@ export default function AdminJobsPage() {
                         <Eye className="size-3.5" />
                         View
                       </button>
+
                       <button
                         type="button"
-                        onClick={() => remove(job)}
+                        disabled={busyId === job._id}
+                        onClick={() => void remove(job)}
                         className={cn(ghostButton, "hover:text-red-400")}
                       >
-                        Remove
+                        {busyId === job._id ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          "Remove"
+                        )}
                       </button>
                     </div>
                   </Td>
@@ -175,7 +253,6 @@ export default function AdminJobsPage() {
             description="No listings match the current search or filters."
             action={
               <button
-                type="button"
                 onClick={() => {
                   setQuery("")
                   setStatus("All Statuses")
@@ -192,23 +269,24 @@ export default function AdminJobsPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
-          label="Engagement Rate"
-          value="82.4%"
-          hint="+5.2% from last month"
+          label="Total job posts"
+          value={String(rows.length)}
+          icon={BriefcaseBusiness}
+          accent="violet"
+        />
+        <StatCard
+          label="Active listings"
+          value={String(
+            rows.filter((j) => getJobStatus(j) === "Active").length
+          )}
           icon={TrendingUp}
           accent="green"
         />
         <StatCard
-          label="Avg. Time to Fill"
-          value="14 Days"
-          hint="Stable performance"
-          icon={Timer}
-          accent="violet"
-        />
-        <StatCard
-          label="Total Applications"
-          value="12,840"
-          hint="-2.1% across tech sectors"
+          label="Total applicants"
+          value={String(
+            rows.reduce((total, job) => total + (job.applicants ?? 0), 0)
+          )}
           icon={Users}
           accent="blue"
         />
@@ -235,6 +313,7 @@ export default function AdminJobsPage() {
                   <p className="text-xs text-[#a0a0ab]">{viewJob.company}</p>
                 </div>
               </div>
+
               <button
                 type="button"
                 onClick={() => setViewJob(null)}
@@ -248,26 +327,26 @@ export default function AdminJobsPage() {
             <dl className="mt-5 grid grid-cols-2 gap-4 text-xs">
               <div>
                 <dt className="text-[#6e6e78]">Reference</dt>
-                <dd className="mt-1 font-mono text-[#ededef]">
-                  {viewJob.ref}
-                </dd>
+                <dd className="mt-1 font-mono text-[#ededef]">{viewJob._id}</dd>
               </div>
               <div>
                 <dt className="text-[#6e6e78]">Category</dt>
-                <dd className="mt-1 text-[#ededef]">{viewJob.category}</dd>
+                <dd className="mt-1 text-[#ededef]">
+                  {getJobCategory(viewJob)}
+                </dd>
               </div>
               <div>
                 <dt className="text-[#6e6e78]">Type</dt>
-                <dd className="mt-1 text-[#ededef]">{viewJob.type}</dd>
+                <dd className="mt-1 text-[#ededef]">{getJobType(viewJob)}</dd>
               </div>
               <div>
                 <dt className="text-[#6e6e78]">Date posted</dt>
-                <dd className="mt-1 text-[#ededef]">{viewJob.posted}</dd>
+                <dd className="mt-1 text-[#ededef]">{getJobDate(viewJob)}</dd>
               </div>
               <div>
                 <dt className="text-[#6e6e78]">Status</dt>
                 <dd className="mt-1">
-                  <StatusBadge status={viewJob.status} />
+                  <StatusBadge status={getJobStatus(viewJob)} />
                 </dd>
               </div>
             </dl>
@@ -280,9 +359,11 @@ export default function AdminJobsPage() {
               >
                 Close
               </button>
+
               <button
                 type="button"
-                onClick={() => remove(viewJob)}
+                disabled={busyId === viewJob._id}
+                onClick={() => void remove(viewJob)}
                 className={cn(primaryButton, "bg-red-600 hover:bg-red-700")}
               >
                 <BriefcaseBusiness className="size-3.5" />
@@ -292,6 +373,8 @@ export default function AdminJobsPage() {
           </div>
         </div>
       ) : null}
+
+      {Toast}
     </div>
   )
 }

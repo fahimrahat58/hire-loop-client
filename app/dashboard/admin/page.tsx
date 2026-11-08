@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import {
   Building2,
@@ -7,12 +9,13 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react"
+
 import {
-  adminJobsByCategory,
   adminRegistrations,
   adminStats,
   adminTransactions,
 } from "@/app/lib/dashboard-data"
+
 import {
   PageHeader,
   SectionCard,
@@ -23,16 +26,42 @@ import {
   Th,
   secondaryButton,
 } from "@/components/dashboard/ui"
+
 import {
   JobsByCategoryChart,
   RegistrationsChart,
 } from "@/components/dashboard/charts"
+
 import { PrintButton } from "@/components/dashboard/print-button"
+import { useJobs } from "@/hooks/use-jobs"
+import { getJobCategory, getJobStatus } from "@/app/lib/jobs-api"
 
 const statIcons = [Users, TrendingUp, Building2, BriefcaseBusiness, DollarSign]
+
 const statAccents = ["blue", "violet", "amber", "green", "red"] as const
 
 export default function AdminDashboardPage() {
+  const { jobs, loading, error } = useJobs()
+
+  const categoryCounts: Record<string, number> = jobs.reduce(
+    (counts, job) => {
+      const category = getJobCategory(job)
+
+      counts[category] = (counts[category] ?? 0) + 1
+
+      return counts
+    },
+    {} as Record<string, number>
+  )
+
+  const adminJobsByCategory: {
+    category: string
+    jobs: number
+  }[] = Object.entries(categoryCounts).map(([category, count]) => ({
+    category,
+    jobs: count,
+  }))
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -44,6 +73,7 @@ export default function AdminDashboardPage() {
               <CalendarDays className="size-3.5" />
               Last 30 days
             </span>
+
             <PrintButton label="Export report" />
           </>
         }
@@ -54,11 +84,24 @@ export default function AdminDashboardPage() {
           <StatCard
             key={stat.label}
             label={stat.label}
-            value={stat.value}
+            value={
+              index === 3
+                ? loading
+                  ? "…"
+                  : String(
+                      jobs.filter((job) => getJobStatus(job) === "Active")
+                        .length
+                    )
+                : stat.value
+            }
             hint={
-              stat.tone === "neutral"
-                ? "No change vs last period"
-                : `${stat.trend} vs last period`
+              index === 3
+                ? error
+                  ? "Unable to load live job totals"
+                  : "Live count from the Jobs API"
+                : stat.tone === "neutral"
+                  ? "No change vs last period"
+                  : `${stat.trend} vs last period`
             }
             icon={statIcons[index] ?? Users}
             accent={statAccents[index] ?? "violet"}
@@ -74,6 +117,7 @@ export default function AdminDashboardPage() {
         >
           <JobsByCategoryChart data={adminJobsByCategory} />
         </SectionCard>
+
         <SectionCard
           title="New user registrations"
           description="Daily signups over the last 30 days"
@@ -105,21 +149,30 @@ export default function AdminDashboardPage() {
               <Th>Status</Th>
             </tr>
           </thead>
+
           <tbody>
             {adminTransactions.map((transaction) => (
               <tr key={transaction.id} className="hover:bg-white/[0.02]">
                 <Td>
-                  <p className="font-medium text-[#ededef]">{transaction.user}</p>
+                  <p className="font-medium text-[#ededef]">
+                    {transaction.user}
+                  </p>
+
                   <p className="text-[11px] text-[#6e6e78]">
                     {transaction.company}
                   </p>
                 </Td>
+
                 <Td>{transaction.plan}</Td>
+
                 <Td className="font-mono text-[11px]">{transaction.id}</Td>
+
                 <Td className="font-medium text-[#ededef]">
                   {transaction.amount}
                 </Td>
+
                 <Td>{transaction.date}</Td>
+
                 <Td>
                   <StatusBadge status={transaction.status} />
                 </Td>

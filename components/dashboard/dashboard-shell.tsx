@@ -3,33 +3,30 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  ArrowUpRight,
-  Bell,
-  ChevronRight,
-  LogOut,
-  Menu,
-  Search,
-  Sparkles,
-  X,
-} from "lucide-react"
+import { Bell, ChevronRight, Menu, Search, Sparkles, X } from "lucide-react"
+
 import { authClient } from "@/app/lib/auth-client"
 import { roleMeta, type Role } from "@/app/lib/dashboard-data"
-import { dashboardNav, publicLinks } from "./nav-config"
+import { dashboardNav } from "./nav-config"
 import { Avatar } from "./ui"
 import { cn } from "@/lib/utils"
 
-function resolveRole(pathname: string | null, sessionRole?: string | null): Role {
+function resolveRole(
+  pathname: string | null,
+  sessionRole?: string | null
+): Role {
   if (pathname?.startsWith("/dashboard/seeker")) return "seeker"
   if (pathname?.startsWith("/dashboard/recruiter")) return "recruiter"
   if (pathname?.startsWith("/dashboard/admin")) return "admin"
 
-  // Shared recruiter-only routes such as /dashboard/jobs/[jobId]/applicants
   if (pathname?.startsWith("/dashboard/jobs")) {
     return sessionRole === "admin" ? "admin" : "recruiter"
   }
 
-  if (sessionRole === "recruiter" || sessionRole === "admin") return sessionRole
+  if (sessionRole === "recruiter" || sessionRole === "admin") {
+    return sessionRole
+  }
+
   return "seeker"
 }
 
@@ -40,18 +37,56 @@ const roleSwitch: { role: Role; label: string }[] = [
 ]
 
 const sidebarCta: Record<Role, { label: string; href: string }> = {
-  seeker: { label: "Complete your profile", href: "/dashboard/seeker/settings" },
-  recruiter: { label: "Post a new job", href: "/dashboard/recruiter/jobs/new" },
-  admin: { label: "Review platform revenue", href: "/dashboard/admin/payments" },
+  seeker: {
+    label: "Complete your profile",
+    href: "/dashboard/seeker/settings",
+  },
+  recruiter: {
+    label: "Post a new job",
+    href: "/dashboard/recruiter/jobs/new",
+  },
+  admin: {
+    label: "Review platform revenue",
+    href: "/dashboard/admin/payments",
+  },
+}
+
+function UserAvatar({
+  name,
+  image,
+  size = "sm",
+}: {
+  name: string
+  image?: string | null
+  size?: "sm" | "md"
+}) {
+  const sizeClass = size === "md" ? "size-10" : "size-8"
+
+  if (!image) {
+    return <Avatar name={name} size={size} />
+  }
+
+  return (
+    <img
+      src={image}
+      alt={`${name}'s profile`}
+      referrerPolicy="no-referrer"
+      className={cn(
+        sizeClass,
+        "shrink-0 rounded-full border border-white/10 object-cover"
+      )}
+    />
+  )
 }
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+
   const { data: session, isPending } = authClient.useSession()
-  // The drawer remembers the path it was opened on, so any route change
-  // closes it without needing an effect that calls setState.
+
   const [openPath, setOpenPath] = useState<string | null>(null)
+
   const mobileOpen = openPath !== null && openPath === pathname
 
   const sessionRole = session?.user?.role
@@ -59,6 +94,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const name = session?.user?.name?.trim() || roleMeta[role].demoName
   const email = session?.user?.email || roleMeta[role].demoEmail
+  const image = session?.user?.image || null
 
   const closeMobileNav = () => setOpenPath(null)
   const openMobileNav = () => setOpenPath(pathname)
@@ -69,6 +105,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     const userRole = session.user.role
 
     if (userRole === "admin" || !userRole) return
+
     if (userRole !== role) {
       router.replace(`/dashboard/${userRole}`)
     }
@@ -86,8 +123,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       pathname={pathname}
       name={name}
       email={email}
-      onLogout={handleLogout}
-      isSignedIn={Boolean(session?.user)}
+      image={image}
       onNavigate={closeMobileNav}
     />
   )
@@ -110,12 +146,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <button
           type="button"
           aria-label="Close navigation"
-          onClick={() => setOpenPath(null)}
+          onClick={closeMobileNav}
           className={cn(
             "absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity",
             mobileOpen ? "opacity-100" : "opacity-0"
           )}
         />
+
         <aside
           className={cn(
             "absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col border-r border-white/10 bg-[#08080a] shadow-2xl transition-transform duration-300",
@@ -125,11 +162,12 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <button
             type="button"
             aria-label="Close navigation"
-            onClick={() => setOpenPath(null)}
+            onClick={closeMobileNav}
             className="absolute top-4 right-3 z-10 rounded-lg p-2 text-[#a0a0ab] transition hover:bg-white/[0.06] hover:text-white"
           >
             <X className="size-4" />
           </button>
+
           {sidebar}
         </aside>
       </div>
@@ -146,11 +184,13 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             <Menu className="size-4" />
           </button>
 
+          {/* Search */}
           <form
             className="relative hidden max-w-sm flex-1 sm:block"
             onSubmit={(event) => event.preventDefault()}
           >
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#6e6e78]" />
+
             <input
               type="search"
               aria-label="Search"
@@ -165,6 +205,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                 <span className="px-1.5 text-[10px] font-semibold tracking-wider text-[#6e6e78] uppercase">
                   Preview
                 </span>
+
                 {roleSwitch.map((item) => (
                   <Link
                     key={item.role}
@@ -191,12 +232,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-[#5c53fe]" />
             </button>
 
+            {/* Header profile */}
             <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-[#141418] py-1 pr-2 pl-1">
-              <Avatar name={name} size="sm" />
+              <UserAvatar name={name} image={image} />
+
               <div className="hidden pr-1 leading-tight sm:block">
                 <p className="max-w-[120px] truncate text-xs font-semibold text-[#ededef]">
                   {name}
                 </p>
+
                 <p className="text-[10px] text-[#6e6e78]">
                   {roleMeta[role].label}
                 </p>
@@ -218,64 +262,81 @@ function SidebarContent({
   pathname,
   name,
   email,
-  isSignedIn,
-  onLogout,
+  image,
   onNavigate,
 }: {
   role: Role
   pathname: string | null
   name: string
   email: string
-  isSignedIn: boolean
-  onLogout: () => void
+  image?: string | null
   onNavigate: () => void
 }) {
   const meta = roleMeta[role]
-  const cta = sidebarCta[role]
   const dashboardRoot = `/dashboard/${role}`
 
   const isActive = (href: string) => {
     if (href === dashboardRoot) {
       return pathname === href || pathname === `${href}/`
     }
+
     return pathname === href || Boolean(pathname?.startsWith(`${href}/`))
   }
 
+  const visibleNavItems = dashboardNav[role].filter(
+    (item) =>
+      item.label.toLowerCase() !== "my company" &&
+      item.label.toLowerCase() !== "billing"
+  )
+
   return (
     <div className="flex h-full min-h-0 flex-col px-4 pt-5 pb-4">
+      {/* Logo */}
       <div className="px-1">
-        <Link href="/" onClick={onNavigate} className="inline-flex items-center gap-2">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          className="inline-flex items-center gap-2"
+        >
           <span className="flex size-8 items-center justify-center rounded-lg bg-[#5c53fe] text-white shadow-lg shadow-[#5c53fe]/25">
             <Sparkles className="size-4" />
           </span>
+
           <span className="text-[20px] font-extrabold tracking-tight">
             <span className="text-blue-500">hire</span>
             <span className="text-orange-500">loop</span>
           </span>
         </Link>
+
         <p className="mt-2 pl-1 text-[10px] font-semibold tracking-[0.18em] text-[#6e6e78] uppercase">
           {meta.subtitle}
         </p>
       </div>
 
+      {/* User profile */}
       <div className="mt-5 rounded-xl border border-white/[0.07] bg-[#141416] p-3">
         <div className="flex items-center gap-2.5">
-          <Avatar name={name} size="sm" />
+          <UserAvatar name={name} image={image} size="md" />
+
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold text-[#ededef]">
               {name}
             </p>
+
             <p className="truncate text-[11px] text-[#7c7c86]">{meta.label}</p>
           </div>
         </div>
+
         <p className="mt-2 truncate text-[11px] text-[#6e6e78]">{email}</p>
+
         <span className="mt-2 inline-flex items-center rounded-full border border-[#5c53fe]/40 bg-[#5c53fe]/15 px-2 py-0.5 text-[10px] font-medium text-[#b8b2ff]">
           {meta.badge}
         </span>
       </div>
 
+      {/* Dashboard Navigation */}
       <nav className="mt-5 space-y-1" aria-label="Dashboard">
-        {dashboardNav[role].map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon
           const active = isActive(item.href)
 
@@ -292,83 +353,19 @@ function SidebarContent({
                   : "text-[#a1a4aa] hover:bg-white/[0.04] hover:text-white"
               )}
             >
-              {active ? (
+              {active && (
                 <span className="absolute top-1/2 left-0 h-5 w-[3px] -translate-y-1/2 rounded-r bg-[#5c53fe]" />
-              ) : null}
+              )}
+
               <Icon className="size-4 shrink-0" />
+
               <span className="flex-1 truncate">{item.label}</span>
-              {active ? (
-                <ChevronRight className="size-3.5 text-[#6e6e78]" />
-              ) : null}
+
+              {active && <ChevronRight className="size-3.5 text-[#6e6e78]" />}
             </Link>
           )
         })}
       </nav>
-
-      <div className="mt-5 border-t border-white/[0.06] pt-4">
-        <p className="px-2 text-[10px] font-semibold tracking-[0.16em] text-[#5e5e68] uppercase">
-          Explore HireLoop
-        </p>
-        <nav className="mt-2 space-y-0.5" aria-label="Public pages">
-          {publicLinks.map((item) => {
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.label}
-                href={item.href}
-                onClick={onNavigate}
-                className="flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[12px] text-[#8b8b96] transition hover:bg-white/[0.04] hover:text-white"
-              >
-                <Icon className="size-3.5 shrink-0" />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-      </div>
-
-      <div className="mt-auto space-y-3 pt-5">
-        <Link
-          href={cta.href}
-          onClick={onNavigate}
-          className="flex items-center justify-between gap-2 rounded-lg bg-[#fafafa] px-3 py-2.5 text-[12px] font-semibold text-[#141418] transition hover:bg-white"
-        >
-          <span className="truncate">{cta.label}</span>
-          <ArrowUpRight className="size-4 shrink-0" />
-        </Link>
-
-        <div className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-[#141416] px-2.5 py-2">
-          <Avatar name={name} size="sm" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[12px] font-medium text-[#ededef]">
-              {name}
-            </p>
-            <p className="truncate text-[10px] text-[#6e6e78]">
-              {isSignedIn ? email : "Preview mode"}
-            </p>
-          </div>
-        </div>
-
-        {isSignedIn ? (
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] font-medium text-[#a1a4aa] transition hover:bg-red-500/10 hover:text-red-400"
-          >
-            <LogOut className="size-3.5" />
-            Log out
-          </button>
-        ) : (
-          <Link
-            href="/sign-in"
-            onClick={onNavigate}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[12px] font-medium text-[#a1a4aa] transition hover:bg-[#5c53fe]/10 hover:text-[#b8b2ff]"
-          >
-            <LogOut className="size-3.5" />
-            Sign in to your account
-          </Link>
-        )}
-      </div>
     </div>
   )
 }

@@ -1,13 +1,3 @@
-/**
- * Reusable client for the HireLoop Jobs API.
- *
- * Every request:
- *  - uses NEXT_PUBLIC_API_URL (no hardcoded API host),
- *  - sends Better Auth cookies with `credentials: "include"`,
- *  - can forward the current Better Auth user (as headers for the API) and
- *  - returns strongly typed data / throws a descriptive JobsApiError.
- */
-
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 ).replace(/\/+$/, "")
@@ -32,6 +22,14 @@ export type ApiJob = {
   ownerId?: string
   userId?: string
   ownerEmail?: string
+  status?: string
+  deadline?: string
+  applicationDeadline?: string
+  applicants?: number
+  salaryMin?: number
+  salaryMax?: number
+  currency?: string
+  [key: string]: unknown
 }
 
 export type JobInput = {
@@ -99,23 +97,23 @@ async function parseBody(response: Response) {
 function buildHeaders(options: JobRequestOptions, init?: RequestInit) {
   const headers = new Headers(init?.headers)
 
+  // These headers are context only. Backend must verify auth independently.
   if (options.user) {
     if (options.user.id) headers.set("x-user-id", options.user.id)
     if (options.user.email) headers.set("x-user-email", options.user.email)
     if (options.user.role) headers.set("x-user-role", options.user.role)
   }
 
-  // Server components forward the incoming Better Auth cookie explicitly.
   if (options.cookie) headers.set("cookie", options.cookie)
 
   return headers
 }
 
-async function request<T>(
+async function request(
   path: string,
   init: RequestInit,
   options: JobRequestOptions = {}
-): Promise<T | null> {
+): Promise<unknown> {
   let response: Response
 
   try {
@@ -124,23 +122,31 @@ async function request<T>(
       headers: buildHeaders(options, init),
       credentials: "include",
       cache: "no-store",
-      signal: options.signal,
+      signal: options.signal ?? init.signal,
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
       throw error
     }
+
     throw new JobsApiError(
       "Unable to reach the jobs service. Please check that the API server is running.",
       0
     )
   }
 
-  const body = (await parseBody(response)) as ApiEnvelope<T> | null
+  const body = await parseBody(response)
 
-  if (!response.ok) {
+  if (
+    !response.ok ||
+    (body &&
+      typeof body === "object" &&
+      "success" in body &&
+      (body as ApiEnvelope<unknown>).success === false)
+  ) {
     throw new JobsApiError(
-      body?.message || `The jobs service returned ${response.status}.`,
+      (body as ApiEnvelope<unknown> | null)?.message ||
+        `The jobs service returned ${response.status}.`,
       response.status
     )
   }
@@ -148,45 +154,54 @@ async function request<T>(
   return body
 }
 
-/* --------------------------------- requests -------------------------------- */
+function unwrapData<T>(body: unknown): T | null {
+  if (body && typeof body === "object" && "data" in body) {
+    return (body as ApiEnvelope<T>).data ?? null
+  }
+
+  return body as T | null
+}
 
 export async function getJobs(
   options: JobRequestOptions = {}
 ): Promise<ApiJob[]> {
-  const body = await request<ApiJob[]>("/api/jobs", { method: "GET" }, options)
+  const body = await request("/api/jobs", { method: "GET" }, options)
+  const data = unwrapData<ApiJob[]>(body)
 
-  if (!Array.isArray(body?.data)) {
+  if (!Array.isArray(data)) {
     throw new JobsApiError(
       "The jobs service returned an unexpected response.",
       502
     )
   }
 
-  return body.data
+  return data
 }
 
 export async function getJob(
   id: string,
   options: JobRequestOptions = {}
 ): Promise<ApiJob> {
-  const body = await request<ApiJob>(
+  const body = await request(
     `/api/jobs/${encodeURIComponent(id)}`,
     { method: "GET" },
     options
   )
 
-  if (!body?.data || typeof body.data !== "object") {
+  const data = unwrapData<ApiJob>(body)
+
+  if (!data || typeof data !== "object") {
     throw new JobsApiError("Job not found.", 404)
   }
 
-  return body.data
+  return data
 }
 
 export async function createJob(
   input: JobInput,
   options: JobRequestOptions = {}
 ): Promise<ApiJob> {
-  const body = await request<ApiJob>(
+  const body = await request(
     "/api/jobs",
     {
       method: "POST",
@@ -196,14 +211,17 @@ export async function createJob(
     options
   )
 
-  if (!body?.data) {
+  const data = unwrapData<ApiJob>(body)
+
+  if (!data) {
     throw new JobsApiError(
-      body?.message || "The job was created but the server did not return it.",
+      (body as ApiEnvelope<ApiJob> | null)?.message ||
+        "The job was created but the server did not return it.",
       502
     )
   }
 
-  return body.data
+  return data
 }
 
 export async function updateJob(
@@ -221,7 +239,6 @@ export async function updateJob(
     options
   )
 
-  // The API answers PATCH with a status message, so read the fresh record.
   return getJob(id, options)
 }
 
@@ -236,14 +253,17 @@ export async function deleteJob(
   )
 }
 
-/* --------------------------------- helpers --------------------------------- */
+export function getJobStatus(job: ApiJob): "Active" | "Closed" | "Draft" {
+  if (job.status?.toLowerCase() === "draft") return "Draft"
 
-export function getJobStatus(job: ApiJob): "Active" | "Closed" {
-  return job.closed ? "Closed" : "Active"
+  return job.closed || job.status?.toLowerCase() === "closed"
+    ? "Closed"
+    : "Active"
 }
 
 export function getJobType(job: ApiJob): string {
   if (job.type) return job.type
+
   return job.location?.toLowerCase().includes("remote") ? "Remote" : "Full-time"
 }
 
@@ -269,6 +289,7 @@ export function getJobDate(job: ApiJob): string {
 
   if (value) {
     const date = new Date(value)
+
     if (!Number.isNaN(date.getTime())) {
       return date.toLocaleDateString("en-US", {
         month: "short",
@@ -285,10 +306,6 @@ export function getJobRef(job: ApiJob): string {
   return job._id ? job._id.slice(-6).toUpperCase() : "—"
 }
 
-/**
- * Extracts the lower bound of a free-form salary string and returns it in
- * thousands (e.g. "$150k - $190k" -> 150, "$120,000" -> 120).
- */
 export function parseSalaryMin(salary?: string): number {
   if (!salary) return 0
 
@@ -299,8 +316,10 @@ export function parseSalaryMin(salary?: string): number {
   if (!Number.isFinite(amount)) return 0
 
   const unit = match[2]?.toLowerCase()
+
   if (unit === "m") return amount * 1000
   if (unit === "k" || amount < 1000) return amount
+
   return amount / 1000
 }
 
@@ -315,11 +334,14 @@ export function buildSalary(
     GBP: "£",
     BDT: "৳",
   }
+
   const symbol = symbols[currency] ?? ""
 
   const format = (value?: string) => {
     const amount = Number(value)
+
     if (!Number.isFinite(amount) || amount <= 0) return ""
+
     return amount >= 1000
       ? `${symbol}${Math.round(amount / 1000)}k`
       : `${symbol}${amount}`
@@ -329,6 +351,7 @@ export function buildSalary(
   const upper = format(max)
 
   if (lower && upper) return `${lower} - ${upper}`
+
   return lower || upper
 }
 
