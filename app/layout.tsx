@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { SiteChrome } from "@/components/site-chrome"
 import "./globals.css"
+import { Toaster } from "sonner"
 
 export const metadata: Metadata = {
   title: "HireLoop",
@@ -15,7 +16,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="relative min-h-screen overflow-x-hidden bg-[#141414] font-sans text-white">
-        <SiteChrome>{children}</SiteChrome>
+        <SiteChrome>
+          {children}
+          <Toaster position="top-right" richColors />
+        </SiteChrome>
       </body>
     </html>
   )

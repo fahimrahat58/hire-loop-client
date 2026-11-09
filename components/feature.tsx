@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { MapPin, Briefcase, Banknote, ArrowRight, Loader2 } from "lucide-react"
+import ApplyButton from "@/components/shared/apply-button"
+import { authClient } from "@/app/lib/auth-client"
 
 interface Job {
   _id: string
@@ -12,11 +14,16 @@ interface Job {
   type?: string
   jobType?: string
   salary: string
+  closed?: boolean
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function SmartJobDiscovery() {
+  const { data: session, isPending } = authClient.useSession()
+
+  const user = session?.user
+
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -43,10 +50,7 @@ export default function SmartJobDiscovery() {
 
         const allJobs: Job[] = Array.isArray(result.data) ? result.data : []
 
-        // Show only active jobs
-        const activeJobs = allJobs.filter(
-          (job: any) => job.status !== "Closed" && job.status !== "Inactive"
-        )
+        const activeJobs = allJobs.filter((job) => !job.closed)
 
         setJobs(activeJobs.slice(0, 6))
       } catch (err) {
@@ -112,7 +116,7 @@ export default function SmartJobDiscovery() {
         </div>
       )}
 
-      {/* Job Cards Grid */}
+      {/* Job Cards */}
 
       {!loading && !error && jobs.length > 0 && (
         <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -152,7 +156,7 @@ export default function SmartJobDiscovery() {
                 </div>
               </div>
 
-              {/* Apply Button */}
+              {/* Actions */}
 
               <div className="mt-8 flex items-center justify-between gap-3">
                 <Link
@@ -163,12 +167,23 @@ export default function SmartJobDiscovery() {
                   <ArrowRight className="size-3.5" />
                 </Link>
 
-                <Link
-                  href={`/jobs/${job._id}/apply`}
-                  className="rounded-lg border border-white/10 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-indigo-500"
-                >
-                  Apply Now
-                </Link>
+                {!isPending && user?.name && user?.email && (
+                  <ApplyButton
+                    jobId={job._id}
+                    name={user.name}
+                    email={user.email}
+                    className="px-4 py-2.5 text-xs"
+                  />
+                )}
+
+                {!isPending && !user && (
+                  <Link
+                    href="/login"
+                    className="rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-cyan-600"
+                  >
+                    Login to Apply
+                  </Link>
+                )}
               </div>
             </div>
           ))}

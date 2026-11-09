@@ -4,6 +4,8 @@ import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, MapPin, Briefcase, Banknote, Loader2 } from "lucide-react"
+import ApplyButton from "@/components/shared/apply-button"
+import { authClient } from "@/app/lib/auth-client"
 
 interface Job {
   _id: string
@@ -14,6 +16,7 @@ interface Job {
   type?: string
   jobType?: string
   salary: string
+  closed?: boolean
   requirements?: string[]
   responsibilities?: string[]
 }
@@ -26,16 +29,23 @@ export default function JobDetailsPage() {
 
   const id = params.id as string
 
+  const { data: session, isPending } = authClient.useSession()
+  const user = session?.user
+
   const [job, setJob] = useState<Job | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
 
   useEffect(() => {
-    if (!id || !API_URL) return
+    if (!id || !API_URL) {
+      setLoading(false)
+      return
+    }
 
     const fetchJob = async () => {
       try {
         setLoading(true)
+        setError("")
 
         const response = await fetch(`${API_URL}/api/jobs/${id}`, {
           cache: "no-store",
@@ -117,6 +127,8 @@ export default function JobDetailsPage() {
           </span>
         </div>
 
+        {/* Job Description */}
+
         <div className="mt-10">
           <h2 className="text-xl font-semibold">Job Description</h2>
 
@@ -124,6 +136,8 @@ export default function JobDetailsPage() {
             {job.description}
           </p>
         </div>
+
+        {/* Requirements */}
 
         {job.requirements?.length ? (
           <div className="mt-8">
@@ -137,6 +151,8 @@ export default function JobDetailsPage() {
           </div>
         ) : null}
 
+        {/* Responsibilities */}
+
         {job.responsibilities?.length ? (
           <div className="mt-8">
             <h2 className="text-xl font-semibold">Responsibilities</h2>
@@ -149,12 +165,40 @@ export default function JobDetailsPage() {
           </div>
         ) : null}
 
-        <Link
-          href={`/jobs/${job._id}/apply`}
-          className="mt-10 inline-flex items-center gap-2 rounded-xl border border-white/10 px-7 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500"
-        >
-          Apply for this job
-        </Link>
+        {/* Apply Button */}
+
+        <div className="mt-10 border-t border-white/10 pt-6">
+          {job.closed ? (
+            <button
+              disabled
+              className="rounded-lg bg-gray-600 px-6 py-3 text-sm font-semibold text-white opacity-60"
+            >
+              Applications Closed
+            </button>
+          ) : isPending ? (
+            <button
+              disabled
+              className="inline-flex items-center gap-2 rounded-lg bg-gray-600 px-6 py-3 text-sm text-white opacity-60"
+            >
+              <Loader2 className="size-4 animate-spin" />
+              Loading...
+            </button>
+          ) : user?.name && user?.email ? (
+            <ApplyButton
+              jobId={job._id}
+              name={user.name}
+              email={user.email}
+              className="px-6 py-3 text-sm"
+            />
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex rounded-lg bg-cyan-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-cyan-600"
+            >
+              Login to Apply
+            </Link>
+          )}
+        </div>
       </div>
     </section>
   )
