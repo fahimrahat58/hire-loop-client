@@ -1,16 +1,11 @@
-import { seekerProfile } from "@/app/lib/dashboard-data"
 import { ProfileSettings } from "@/components/dashboard/profile-settings"
 
 export default function SeekerSettingsPage() {
   return (
     <ProfileSettings
-      initialName={seekerProfile.name}
-      initialEmail={seekerProfile.email}
+      pageTitle="Seeker Settings"
+      description="Update the profile and security details supported by your HireLoop account."
       roleLabel="Job Seeker"
-      headline={seekerProfile.headline}
-      bio={seekerProfile.bio}
-      skills={seekerProfile.skills}
-      resume={seekerProfile.resume}
     />
   )
 }

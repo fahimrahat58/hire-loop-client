@@ -30,10 +30,25 @@ import {
   secondaryButton,
   primaryButton,
 } from "@/components/dashboard/ui"
+import ApplyButton from "@/components/shared/apply-button"
+import SaveJobButton from "@/components/shared/save-job-button"
 
 export default function JobDetailsPage() {
   const params = useParams<{ jobId: string }>()
   const { data: session } = authClient.useSession()
+
+  const role = session?.user?.role
+  const isSeeker = role === "seeker"
+
+  const userId = session?.user?.id
+  const userEmail = session?.user?.email
+
+  const backHref =
+    role === "admin"
+      ? "/dashboard/admin/jobs"
+      : role === "recruiter"
+        ? "/dashboard/recruiter/jobs"
+        : "/dashboard/seeker/jobs"
 
   const [job, setJob] = useState<ApiJob | null>(null)
   const [loading, setLoading] = useState(true)
@@ -47,11 +62,11 @@ export default function JobDetailsPage() {
     setLoading(true)
 
     getJob(params.jobId, {
-      user: session?.user
+      user: userId
         ? {
-            id: session.user.id,
-            email: session.user.email,
-            role: session.user.role,
+            id: userId,
+            email: userEmail,
+            role,
           }
         : null,
       signal: controller.signal,
@@ -67,7 +82,7 @@ export default function JobDetailsPage() {
       })
 
     return () => controller.abort()
-  }, [params.jobId, session])
+  }, [params.jobId, userId, userEmail, role])
 
   if (loading) {
     return (
@@ -87,8 +102,8 @@ export default function JobDetailsPage() {
             error || "This job may have been removed or is no longer available."
           }
           action={
-            <Link href="/dashboard/seeker/jobs" className={primaryButton}>
-              Browse jobs
+            <Link href={backHref} className={primaryButton}>
+              Back to jobs
             </Link>
           }
         />
@@ -101,11 +116,11 @@ export default function JobDetailsPage() {
       <PageHeader
         eyebrow={
           <Link
-            href="/dashboard/seeker/jobs"
+            href={backHref}
             className="inline-flex items-center gap-1 text-xs text-[#a0a0ab] transition hover:text-white"
           >
             <ArrowLeft className="size-3.5" />
-            Back to browse jobs
+            Back to jobs
           </Link>
         }
         title={job.title}
@@ -170,18 +185,30 @@ export default function JobDetailsPage() {
           </div>
         ) : null}
 
-        <div className="mt-7 flex flex-wrap gap-2">
-          <Link href="/dashboard/seeker/jobs" className={secondaryButton}>
+        <div className="mt-7 flex flex-wrap items-center gap-2">
+          <Link href={backHref} className={secondaryButton}>
             Back to jobs
           </Link>
 
-          {job.closed ? (
-            <span className={secondaryButton}>This position is closed</span>
+          {isSeeker ? (
+            <>
+              <SaveJobButton jobId={job._id} />
+
+              {job.closed ? (
+                <span className={secondaryButton}>This position is closed</span>
+              ) : (
+                <ApplyButton
+                  jobId={job._id}
+                  name={session?.user?.name || ""}
+                  email={session?.user?.email || ""}
+                />
+              )}
+            </>
           ) : (
-            <Link href="/dashboard/seeker/jobs" className={primaryButton}>
+            <span className={secondaryButton}>
               <BriefcaseBusiness className="size-3.5" />
-              Apply for this job
-            </Link>
+              Manage this job from your dashboard
+            </span>
           )}
         </div>
       </DashboardCard>

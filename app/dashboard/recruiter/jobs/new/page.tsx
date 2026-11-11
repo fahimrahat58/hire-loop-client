@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
@@ -41,13 +40,12 @@ import { cn } from "@/lib/utils"
 
 const initialForm = {
   title: "",
+  company: "",
   category: "Design",
-  type: "Full-time",
   salaryMin: "",
   salaryMax: "",
   currency: "USD",
   location: "",
-  deadline: "",
   responsibilities: "",
   requirements: "",
   benefits: "",
@@ -64,10 +62,10 @@ export default function RecruiterNewJobPage() {
 
   const currentUser: JobUser | null = user
     ? {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    }
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      }
     : null
 
   const [form, setForm] = useState<FormData>(initialForm)
@@ -79,6 +77,8 @@ export default function RecruiterNewJobPage() {
   const [loadingJob, setLoadingJob] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
+
+  const [jobStatus, setJobStatus] = useState<"active" | "draft">("active")
 
   const activeRequestRef = useRef<string | null>(null)
 
@@ -155,22 +155,46 @@ export default function RecruiterNewJobPage() {
       }
 
       // --------------------------------
+      // JOB STATUS
+      // --------------------------------
+
+      const existingStatus =
+        job.status?.toLowerCase() === "draft" ? "draft" : "active"
+
+      setJobStatus(existingStatus)
+
+      // --------------------------------
       // SALARY
       // --------------------------------
 
       const salary = job.salary || ""
 
       const salaryMatch = salary.match(
-        /(\d[\d,]*)\s*(?:-|to)\s*(\d[\d,]*)/i
+        /(\d[\d,.]*)\s*([km])?\s*(?:-|to)\s*(\d[\d,.]*)\s*([km])?/i
       )
+
+      const toAmount = (value: string, unit?: string) => {
+        const amount = Number(value.replaceAll(",", ""))
+
+        if (!Number.isFinite(amount)) return ""
+
+        const multiplier =
+          unit?.toLowerCase() === "k"
+            ? 1000
+            : unit?.toLowerCase() === "m"
+              ? 1_000_000
+              : 1
+
+        return String(Math.round(amount * multiplier))
+      }
 
       const salaryMin =
         job.salaryMin?.toString() ||
-        (salaryMatch ? salaryMatch[1].replaceAll(",", "") : "")
+        (salaryMatch ? toAmount(salaryMatch[1], salaryMatch[2]) : "")
 
       const salaryMax =
         job.salaryMax?.toString() ||
-        (salaryMatch ? salaryMatch[2].replaceAll(",", "") : "")
+        (salaryMatch ? toAmount(salaryMatch[3], salaryMatch[4]) : "")
 
       // --------------------------------
       // DESCRIPTION
@@ -186,9 +210,7 @@ export default function RecruiterNewJobPage() {
         /Requirements\s*\n([\s\S]*?)(?=\n\nBenefits|$)/i
       )
 
-      const benefitsMatch = description.match(
-        /Benefits\s*\n([\s\S]*?)$/i
-      )
+      const benefitsMatch = description.match(/Benefits\s*\n([\s\S]*?)$/i)
 
       // --------------------------------
       // PREFILL FORM
@@ -196,26 +218,18 @@ export default function RecruiterNewJobPage() {
 
       setForm({
         title: job.title || "",
+        company: job.company || "",
         category: job.category || "Design",
-        type: job.type || "Full-time",
         salaryMin,
         salaryMax,
         currency: job.currency || "USD",
         location: job.location || "",
-        deadline:
-          job.deadline?.slice(0, 10) ||
-          job.applicationDeadline?.slice(0, 10) ||
-          "",
-        responsibilities:
-          responsibilitiesMatch?.[1]?.trim() || description,
+        responsibilities: responsibilitiesMatch?.[1]?.trim() || description,
         requirements: requirementsMatch?.[1]?.trim() || "",
         benefits: benefitsMatch?.[1]?.trim() || "",
       })
 
-      setRemote(
-        job.type === "Remote" ||
-        job.location?.toLowerCase() === "remote"
-      )
+      setRemote(job.location?.toLowerCase() === "remote")
     } catch (error) {
       console.error("LOAD JOB ERROR:", error)
 
@@ -227,12 +241,7 @@ export default function RecruiterNewJobPage() {
       setLoadingJob(false)
       setJobLoaded(true)
     }
-  }, [
-    editId,
-    currentUser?.id,
-    currentUser?.email,
-    currentUser?.role,
-  ])
+  }, [editId, currentUser?.id, currentUser?.email, currentUser?.role])
 
   // --------------------------------
   // INITIAL EDIT FETCH
@@ -272,6 +281,16 @@ export default function RecruiterNewJobPage() {
       toast.add({
         title: "Job title required",
         description: "Please enter a job title.",
+        type: "error",
+      })
+
+      return false
+    }
+
+    if (!form.company.trim()) {
+      toast.add({
+        title: "Company name required",
+        description: "Please enter your company name.",
         type: "error",
       })
 
@@ -321,20 +340,6 @@ export default function RecruiterNewJobPage() {
       return false
     }
 
-    if (form.deadline) {
-      const deadline = new Date(`${form.deadline}T23:59:59`)
-
-      if (deadline < new Date()) {
-        toast.add({
-          title: "Invalid application deadline",
-          description: "The deadline cannot be in the past.",
-          type: "error",
-        })
-
-        return false
-      }
-    }
-
     return true
   }
 
@@ -352,9 +357,19 @@ export default function RecruiterNewJobPage() {
 
     const symbol = symbols[form.currency] || ""
 
+    const formatAmount = (value: string) => {
+      const amount = Number(value)
+
+      if (!Number.isFinite(amount) || amount <= 0) return ""
+
+      return amount >= 1000 && amount % 1000 === 0
+        ? `${symbol}${amount / 1000}k`
+        : `${symbol}${amount}`
+    }
+
     const salaryParts = [
-      form.salaryMin ? `${symbol}${form.salaryMin}` : "",
-      form.salaryMax ? `${symbol}${form.salaryMax}` : "",
+      formatAmount(form.salaryMin),
+      formatAmount(form.salaryMax),
     ].filter(Boolean)
 
     const salary = salaryParts.join(" - ")
@@ -368,27 +383,17 @@ export default function RecruiterNewJobPage() {
         ? `Requirements\n${form.requirements.trim()}`
         : "",
 
-      form.benefits.trim()
-        ? `Benefits\n${form.benefits.trim()}`
-        : "",
+      form.benefits.trim() ? `Benefits\n${form.benefits.trim()}` : "",
     ]
       .filter(Boolean)
       .join("\n\n")
 
     return {
       title: form.title.trim(),
+      company: form.company.trim(),
       category: form.category,
-      type: remote ? "Remote" : form.type,
       location: remote ? "Remote" : form.location.trim(),
       salary,
-      salaryMin: form.salaryMin
-        ? Number(form.salaryMin)
-        : undefined,
-      salaryMax: form.salaryMax
-        ? Number(form.salaryMax)
-        : undefined,
-      currency: form.currency,
-      deadline: form.deadline || undefined,
       description,
       status,
       closed: status === "draft",
@@ -423,6 +428,8 @@ export default function RecruiterNewJobPage() {
       return
     }
 
+    if (submitting) return
+
     if (!validateForm()) return
 
     setSubmitting(true)
@@ -431,20 +438,35 @@ export default function RecruiterNewJobPage() {
       const payload = buildPayload(status)
 
       if (editId) {
-        // Company field is not sent during update.
-        // Existing database company remains unchanged.
-
         await updateJob(editId, payload, {
           user: currentUser,
         })
 
         toast.add({
-          title: "Job updated successfully!",
-          description: "Your changes have been saved.",
+          title:
+            status === "draft"
+              ? "Draft saved successfully!"
+              : jobStatus === "draft"
+                ? "Job published successfully!"
+                : "Job updated successfully!",
+
+          description:
+            status === "draft"
+              ? "Your job has been saved as a draft."
+              : jobStatus === "draft"
+                ? "Your job is now available to job seekers."
+                : "Your changes have been saved.",
+
           type: "success",
         })
 
-        setResult("updated")
+        if (status === "draft") {
+          setResult("draft")
+        } else if (jobStatus === "draft") {
+          setResult("published")
+        } else {
+          setResult("updated")
+        }
       } else {
         const createdJob = await createJob(payload, {
           user: currentUser,
@@ -468,6 +490,8 @@ export default function RecruiterNewJobPage() {
 
         setResult(status === "draft" ? "draft" : "published")
       }
+
+      setJobStatus(status)
     } catch (error) {
       console.error("SAVE JOB ERROR:", error)
 
@@ -542,10 +566,7 @@ export default function RecruiterNewJobPage() {
           </p>
 
           <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Link
-              href="/dashboard/recruiter/jobs"
-              className={primaryButton}
-            >
+            <Link href="/dashboard/recruiter/jobs" className={primaryButton}>
               Go to Manage Jobs
             </Link>
 
@@ -555,6 +576,7 @@ export default function RecruiterNewJobPage() {
                 onClick={() => {
                   setForm(initialForm)
                   setRemote(false)
+                  setJobStatus("active")
                   setResult(null)
                 }}
                 className={secondaryButton}
@@ -615,9 +637,7 @@ export default function RecruiterNewJobPage() {
         <DashboardCard className="flex flex-col items-center gap-3 p-8 text-center">
           <AlertCircle className="size-9 text-red-400" />
 
-          <p className="max-w-md text-sm text-[#a0a0ab]">
-            {pageError}
-          </p>
+          <p className="max-w-md text-sm text-[#a0a0ab]">{pageError}</p>
 
           <button
             type="button"
@@ -627,10 +647,7 @@ export default function RecruiterNewJobPage() {
             Try again
           </button>
 
-          <Link
-            href="/dashboard/recruiter/jobs"
-            className={secondaryButton}
-          >
+          <Link href="/dashboard/recruiter/jobs" className={secondaryButton}>
             Back to jobs
           </Link>
         </DashboardCard>
@@ -645,17 +662,14 @@ export default function RecruiterNewJobPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={editId ? "Edit Job" : "Post a Job"}
+        title={editId ? "Job Settings" : "Post a Job"}
         description={
           editId
-            ? "Update your job details and save your changes."
+            ? "Update the job details supported by the HireLoop jobs API."
             : "Reach qualified candidates by creating a new job post."
         }
         actions={
-          <Link
-            href="/dashboard/recruiter/jobs"
-            className={secondaryButton}
-          >
+          <Link href="/dashboard/recruiter/jobs" className={secondaryButton}>
             <ArrowLeft className="size-3.5" />
             Back to jobs
           </Link>
@@ -677,73 +691,54 @@ export default function RecruiterNewJobPage() {
           >
             <div className="space-y-4">
               <div>
-                <FieldLabel htmlFor="job-title">
-                  Job title *
-                </FieldLabel>
+                <FieldLabel htmlFor="job-title">Job title *</FieldLabel>
 
                 <input
                   id="job-title"
                   required
                   maxLength={120}
                   value={form.title}
-                  onChange={(event) =>
-                    update("title", event.target.value)
-                  }
+                  onChange={(event) => update("title", event.target.value)}
                   placeholder="e.g. Senior Product Designer"
                   className={inputClass}
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <FieldLabel htmlFor="job-category">
-                    Job category
-                  </FieldLabel>
+              <div>
+                <FieldLabel htmlFor="company-name">Company name *</FieldLabel>
 
-                  <select
-                    id="job-category"
-                    value={form.category}
-                    onChange={(event) =>
-                      update("category", event.target.value)
-                    }
-                    className={inputClass}
-                  >
-                    <option>Design</option>
-                    <option>Engineering</option>
-                    <option>Product</option>
-                    <option>Marketing</option>
-                    <option>Sales</option>
-                    <option>Operations</option>
-                  </select>
-                </div>
+                <input
+                  id="company-name"
+                  required
+                  maxLength={100}
+                  value={form.company}
+                  onChange={(event) => update("company", event.target.value)}
+                  placeholder="e.g. Google, Microsoft, Spotify"
+                  className={inputClass}
+                />
+              </div>
 
-                <div>
-                  <FieldLabel htmlFor="job-type">
-                    Job type
-                  </FieldLabel>
+              <div>
+                <FieldLabel htmlFor="job-category">Job category</FieldLabel>
 
-                  <select
-                    id="job-type"
-                    value={form.type}
-                    onChange={(event) =>
-                      update("type", event.target.value)
-                    }
-                    className={inputClass}
-                  >
-                    <option>Full-time</option>
-                    <option>Part-time</option>
-                    <option>Remote</option>
-                    <option>Contract</option>
-                    <option>Internship</option>
-                  </select>
-                </div>
+                <select
+                  id="job-category"
+                  value={form.category}
+                  onChange={(event) => update("category", event.target.value)}
+                  className={inputClass}
+                >
+                  <option>Design</option>
+                  <option>Engineering</option>
+                  <option>Product</option>
+                  <option>Marketing</option>
+                  <option>Sales</option>
+                  <option>Operations</option>
+                </select>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-3">
                 <div>
-                  <FieldLabel htmlFor="salary-min">
-                    Salary min
-                  </FieldLabel>
+                  <FieldLabel htmlFor="salary-min">Salary min</FieldLabel>
 
                   <input
                     id="salary-min"
@@ -759,9 +754,7 @@ export default function RecruiterNewJobPage() {
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="salary-max">
-                    Salary max
-                  </FieldLabel>
+                  <FieldLabel htmlFor="salary-max">Salary max</FieldLabel>
 
                   <input
                     id="salary-max"
@@ -777,16 +770,12 @@ export default function RecruiterNewJobPage() {
                 </div>
 
                 <div>
-                  <FieldLabel htmlFor="currency">
-                    Currency
-                  </FieldLabel>
+                  <FieldLabel htmlFor="currency">Currency</FieldLabel>
 
                   <select
                     id="currency"
                     value={form.currency}
-                    onChange={(event) =>
-                      update("currency", event.target.value)
-                    }
+                    onChange={(event) => update("currency", event.target.value)}
                     className={inputClass}
                   >
                     <option>USD</option>
@@ -797,44 +786,18 @@ export default function RecruiterNewJobPage() {
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <FieldLabel htmlFor="job-location">
-                    Location
-                  </FieldLabel>
+              <div>
+                <FieldLabel htmlFor="job-location">Location</FieldLabel>
 
-                  <input
-                    id="job-location"
-                    required={!remote}
-                    disabled={remote}
-                    value={remote ? "Remote" : form.location}
-                    onChange={(event) =>
-                      update("location", event.target.value)
-                    }
-                    placeholder="City, country"
-                    className={cn(
-                      inputClass,
-                      remote && "opacity-60"
-                    )}
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel htmlFor="job-deadline">
-                    Application deadline
-                  </FieldLabel>
-
-                  <input
-                    id="job-deadline"
-                    type="date"
-                    min={new Date().toISOString().slice(0, 10)}
-                    value={form.deadline}
-                    onChange={(event) =>
-                      update("deadline", event.target.value)
-                    }
-                    className={inputClass}
-                  />
-                </div>
+                <input
+                  id="job-location"
+                  required={!remote}
+                  disabled={remote}
+                  value={remote ? "Remote" : form.location}
+                  onChange={(event) => update("location", event.target.value)}
+                  placeholder="City, country"
+                  className={cn(inputClass, remote && "opacity-60")}
+                />
               </div>
 
               <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-[#a0a0ab]">
@@ -854,7 +817,6 @@ export default function RecruiterNewJobPage() {
                   }}
                   className="size-4 rounded border-white/20 bg-[#0f0f13] accent-[#5c53fe]"
                 />
-
                 This is a fully remote role
               </label>
             </div>
@@ -884,9 +846,7 @@ export default function RecruiterNewJobPage() {
               </div>
 
               <div>
-                <FieldLabel htmlFor="requirements">
-                  Requirements
-                </FieldLabel>
+                <FieldLabel htmlFor="requirements">Requirements</FieldLabel>
 
                 <textarea
                   id="requirements"
@@ -901,17 +861,13 @@ export default function RecruiterNewJobPage() {
               </div>
 
               <div>
-                <FieldLabel htmlFor="benefits">
-                  Benefits (optional)
-                </FieldLabel>
+                <FieldLabel htmlFor="benefits">Benefits (optional)</FieldLabel>
 
                 <textarea
                   id="benefits"
                   rows={3}
                   value={form.benefits}
-                  onChange={(event) =>
-                    update("benefits", event.target.value)
-                  }
+                  onChange={(event) => update("benefits", event.target.value)}
                   placeholder="Equity, remote budget, learning stipend..."
                   className={cn(inputClass, "resize-none")}
                 />
@@ -940,6 +896,8 @@ export default function RecruiterNewJobPage() {
               </li>
             </ul>
 
+            {/* PUBLISH / UPDATE */}
+
             <button
               type="submit"
               disabled={submitting}
@@ -954,21 +912,27 @@ export default function RecruiterNewJobPage() {
               {submitting
                 ? "Saving..."
                 : editId
-                  ? "Update job"
+                  ? jobStatus === "draft"
+                    ? "Publish job"
+                    : "Update job"
                   : "Publish job"}
             </button>
 
-            {!editId && (
-              <button
-                type="button"
-                disabled={submitting}
-                onClick={() => void handleSubmit("draft")}
-                className={cn(secondaryButton, "mt-2 w-full")}
-              >
+            {/* SAVE AS DRAFT */}
+
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => void handleSubmit("draft")}
+              className={cn(secondaryButton, "mt-2 w-full")}
+            >
+              {submitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
                 <Clock className="size-4" />
-                Save as draft
-              </button>
-            )}
+              )}
+              Save as draft
+            </button>
 
             <p className="mt-3 text-center text-[10px] leading-relaxed text-[#6e6e78]">
               Your job information will be saved to HireLoop.

@@ -485,7 +485,7 @@ export default function RecruiterJobsPage() {
                         {/* APPLICANTS */}
 
                         <Link
-                          href={`/dashboard/jobs/${job._id}/applicants`}
+                          href={`/dashboard/recruiter/jobs/${job._id}/applicants`}
                           className={ghostButton}
                         >
                           <Eye className="size-3.5" />

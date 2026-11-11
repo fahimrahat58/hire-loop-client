@@ -1,12 +1,24 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check, FileText, KeyRound, Plus, Trash2, X } from "lucide-react"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import {
+  Check,
+  KeyRound,
+  Loader2,
+  LogOut,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react"
+import { toast } from "sonner"
 
 import { authClient } from "@/app/lib/auth-client"
-
 import {
   Avatar,
+  DashboardCard,
+  EmptyState,
   FieldLabel,
   PageHeader,
   SectionCard,
@@ -15,90 +27,64 @@ import {
   primaryButton,
   secondaryButton,
 } from "@/components/dashboard/ui"
-
 import { cn } from "@/lib/utils"
 
 interface ProfileSettingsProps {
   pageTitle?: string
   description?: string
-  initialName?: string
-  initialEmail?: string
   roleLabel: string
-  headline?: string
-  bio?: string
-  skills?: string[]
-  showProfessional?: boolean
-  showResume?: boolean
-  resume?: { name: string; meta: string }
+}
+
+function isValidImageUrl(value: string) {
+  if (!value) return true
+
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
 }
 
 export function ProfileSettings({
   pageTitle = "Settings",
-  description = "Manage your account details and professional profile.",
-  initialName = "",
-  initialEmail = "",
+  description = "Manage the account information supported by HireLoop.",
   roleLabel,
-  headline,
-  bio,
-  skills = [],
-  showProfessional = true,
-  showResume = true,
-  resume,
 }: ProfileSettingsProps) {
-  const { data: session, isPending } = authClient.useSession()
+  const router = useRouter()
 
-  const [name, setName] = useState(initialName)
-  const [email, setEmail] = useState(initialEmail)
+  const { data: session, isPending, refetch } = authClient.useSession()
+
+  const [name, setName] = useState("")
   const [imageUrl, setImageUrl] = useState("")
+  const [savingProfile, setSavingProfile] = useState(false)
 
-  const [headlineValue, setHeadlineValue] = useState(headline ?? "")
-  const [bioValue, setBioValue] = useState(bio ?? "")
-  const [skillList, setSkillList] = useState<string[]>(skills)
-  const [newSkill, setNewSkill] = useState("")
-  const [resumeFile, setResumeFile] = useState(resume)
+  const [currentPassword, setCurrentPassword] = useState("")
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [changingPassword, setChangingPassword] = useState(false)
 
-  const [notice, setNotice] = useState("")
-  const [saving, setSaving] = useState(false)
-
-  // Load logged-in user information
   useEffect(() => {
-    if (session?.user) {
-      setName(session.user.name || "")
-      setEmail(session.user.email || "")
-      setImageUrl(session.user.image || "")
-    }
+    if (!session?.user) return
+
+    setName(session.user.name || "")
+    setImageUrl(session.user.image || "")
   }, [session])
 
-  const flash = (message: string) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(""), 4000)
-  }
-
-  // Update profile
   const handleUpdateProfile = async () => {
     if (!name.trim()) {
-      flash("Please enter your full name.")
+      toast.error("Please enter your full name.")
       return
     }
 
-    if (imageUrl.trim()) {
-      try {
-        const parsedUrl = new URL(imageUrl.trim())
-
-        if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-          flash("Please enter a valid image URL.")
-          return
-        }
-      } catch {
-        flash("Please enter a valid image URL.")
-        return
-      }
+    if (!isValidImageUrl(imageUrl.trim())) {
+      toast.error("Please enter a valid image URL starting with http or https.")
+      return
     }
 
-    try {
-      setSaving(true)
-      setNotice("")
+    setSavingProfile(true)
 
+    try {
       const result = await authClient.updateUser({
         name: name.trim(),
         image: imageUrl.trim() || null,
@@ -108,36 +94,113 @@ export function ProfileSettings({
         throw new Error(result.error.message || "Profile update failed.")
       }
 
-      flash("Profile updated successfully.")
+      await refetch()
+      toast.success("Profile updated successfully.")
     } catch (error) {
-      flash(error instanceof Error ? error.message : "Something went wrong.")
+      toast.error(
+        error instanceof Error ? error.message : "Unable to update your profile."
+      )
     } finally {
-      setSaving(false)
+      setSavingProfile(false)
     }
   }
 
-  // Add skill
-  const addSkill = () => {
-    const value = newSkill.trim()
+  const handleChangePassword = async () => {
+    if (!currentPassword) {
+      toast.error("Enter your current password.")
+      return
+    }
 
-    if (!value) return
+    if (newPassword.length < 8) {
+      toast.error("Your new password must be at least 8 characters.")
+      return
+    }
 
-    setSkillList((current) =>
-      current.some((skill) => skill.toLowerCase() === value.toLowerCase())
-        ? current
-        : [...current, value]
-    )
+    if (newPassword !== confirmPassword) {
+      toast.error("The new passwords do not match.")
+      return
+    }
 
-    setNewSkill("")
+    setChangingPassword(true)
+
+    try {
+      const result = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      })
+
+      if (result.error) {
+        throw new Error(result.error.message || "Password change failed.")
+      }
+
+      setCurrentPassword("")
+      setNewPassword("")
+      setConfirmPassword("")
+      toast.success("Password changed successfully.")
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to change your password."
+      )
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
+  const handleSignOut = async () => {
+    try {
+      await authClient.signOut()
+      router.push("/")
+      router.refresh()
+    } catch {
+      toast.error("Unable to sign out. Please try again.")
+    }
   }
 
   if (isPending) {
     return (
-      <div className="flex min-h-[300px] items-center justify-center">
-        <p className="text-sm text-[#8b8b95]">Loading profile...</p>
+      <div className="space-y-6">
+        <div className="h-8 w-48 animate-pulse rounded bg-white/[0.06]" />
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {[1, 2].map((item) => (
+            <div
+              key={item}
+              className="h-72 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.03]"
+            />
+          ))}
+        </div>
       </div>
     )
   }
+
+  if (!session?.user) {
+    return (
+      <DashboardCard>
+        <EmptyState
+          title="Sign in to manage your settings"
+          description="Account settings are managed through your HireLoop session."
+          action={
+            <Link href="/sign-in" className={primaryButton}>
+              Sign in
+            </Link>
+          }
+        />
+      </DashboardCard>
+    )
+  }
+
+  const memberSince = session.user.createdAt
+    ? new Date(session.user.createdAt as Date | string).toLocaleDateString(
+        "en-US",
+        {
+          month: "long",
+          year: "numeric",
+        }
+      )
+    : "—"
 
   return (
     <div className="space-y-6">
@@ -147,24 +210,26 @@ export function ProfileSettings({
         actions={<StatusBadge status={roleLabel} />}
       />
 
-      {notice ? (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 px-4 py-2.5 text-[13px] text-[#86efac]"
-        >
-          <Check className="size-4" />
-          {notice}
+      <div className="flex flex-col gap-3 rounded-xl border border-[#5c53fe]/25 bg-[#5c53fe]/10 px-4 py-3 text-[13px] text-[#c7c2ff] sm:flex-row sm:items-start">
+        <ShieldCheck className="mt-0.5 size-4 shrink-0" />
+
+        <div>
+          <p className="font-medium">Only supported account fields are shown</p>
+          <p className="mt-0.5 text-[12px] text-[#a79fff]">
+            Name, profile image, and password are handled by Better Auth. The
+            backend does not store headline, bio, skills, resume, notification
+            preferences, or job preferences, so those fields are not presented
+            as working settings.
+          </p>
         </div>
-      ) : null}
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Profile Information */}
         <SectionCard
           title="Profile information"
           description="This is how you appear across HireLoop."
           bodyClassName="p-5"
         >
-          {/* Profile Image URL */}
           <div className="flex items-center gap-4">
             {imageUrl ? (
               <img
@@ -180,7 +245,7 @@ export function ProfileSettings({
             )}
 
             <div className="min-w-0 flex-1">
-              <FieldLabel htmlFor="profile-image">Profile Image URL</FieldLabel>
+              <FieldLabel htmlFor="profile-image">Profile image URL</FieldLabel>
 
               <input
                 id="profile-image"
@@ -192,12 +257,12 @@ export function ProfileSettings({
               />
 
               <p className="mt-2 text-[11px] text-[#6e6e78]">
-                Paste your profile image URL.
+                Paste a public image URL, or leave it empty to use your
+                initials.
               </p>
             </div>
           </div>
 
-          {/* Profile Fields */}
           <div className="mt-5 space-y-4">
             <div>
               <FieldLabel htmlFor="profile-name">Full name</FieldLabel>
@@ -217,194 +282,159 @@ export function ProfileSettings({
               <input
                 id="profile-email"
                 type="email"
-                value={email}
+                value={session.user.email}
                 readOnly
                 className={cn(inputClass, "cursor-not-allowed opacity-70")}
               />
 
               <p className="mt-1 text-[11px] text-[#6e6e78]">
-                Email address cannot be changed here.
+                Email changes are not enabled in the current authentication
+                configuration.
               </p>
             </div>
           </div>
 
-          {/* Actions */}
-          <div className="mt-5 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleUpdateProfile}
-              disabled={saving}
-              className={cn(
-                primaryButton,
-                saving && "cursor-not-allowed opacity-60"
-              )}
-            >
-              {saving ? "Updating..." : "Update profile"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                flash("Use the password reset option on the login page.")
-              }
-              className={secondaryButton}
-            >
-              <KeyRound className="size-3.5" />
-              Reset password
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void handleUpdateProfile()}
+            disabled={savingProfile}
+            className={cn(primaryButton, "mt-5")}
+          >
+            {savingProfile ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Check className="size-3.5" />
+            )}
+            {savingProfile ? "Updating..." : "Update profile"}
+          </button>
         </SectionCard>
 
-        {/* Professional Details */}
-        {showProfessional ? (
-          <SectionCard
-            title="Professional details"
-            description="Help recruiters understand what you do best."
-            bodyClassName="p-5"
-          >
+        <SectionCard
+          title="Password"
+          description="Change the password used to sign in."
+          bodyClassName="p-5"
+        >
+          <div className="space-y-4">
             <div>
-              <FieldLabel htmlFor="headline">Professional headline</FieldLabel>
+              <FieldLabel htmlFor="current-password">
+                Current password
+              </FieldLabel>
 
               <input
-                id="headline"
-                value={headlineValue}
-                onChange={(event) => setHeadlineValue(event.target.value)}
-                placeholder="e.g. Senior UX/UI Designer"
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                placeholder="Enter your current password"
                 className={inputClass}
               />
             </div>
 
-            <div className="mt-4">
-              <FieldLabel htmlFor="bio">Bio</FieldLabel>
-
-              <textarea
-                id="bio"
-                rows={4}
-                value={bioValue}
-                onChange={(event) => setBioValue(event.target.value)}
-                className={cn(inputClass, "resize-none")}
-              />
-            </div>
-
-            <div className="mt-4">
-              <FieldLabel>Skills</FieldLabel>
-
-              <div className="flex flex-wrap gap-1.5">
-                {skillList.map((skill) => (
-                  <span
-                    key={skill}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-[#8f88ff]/25 bg-[#5c53fe]/10 py-1 pr-1.5 pl-2.5 text-[11px] text-[#c7c2ff]"
-                  >
-                    {skill}
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSkillList((current) =>
-                          current.filter((item) => item !== skill)
-                        )
-                      }
-                      aria-label={`Remove ${skill}`}
-                      className="rounded-full p-0.5 transition hover:bg-white/10"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-
-              <div className="mt-2 flex gap-2">
-                <input
-                  value={newSkill}
-                  onChange={(event) => setNewSkill(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault()
-                      addSkill()
-                    }
-                  }}
-                  placeholder="Add a skill..."
-                  className={inputClass}
-                />
-
-                <button
-                  type="button"
-                  onClick={addSkill}
-                  aria-label="Add skill"
-                  className={secondaryButton}
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() =>
-                flash("Professional details are not connected to the API yet.")
-              }
-              className={`${primaryButton} mt-5`}
-            >
-              Save details
-            </button>
-          </SectionCard>
-        ) : null}
-      </div>
-
-      {/* Resume */}
-      {showResume ? (
-        <SectionCard title="Resume" bodyClassName="p-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-[#5c53fe]/15 text-[#b8b2ff]">
-                <FileText className="size-5" />
-              </span>
-
-              <div>
-                <p className="text-[13px] font-medium text-[#ededef]">
-                  {resumeFile?.name ?? "No resume uploaded"}
-                </p>
-
-                <p className="mt-0.5 text-[11px] text-[#6e6e78]">
-                  {resumeFile?.meta ??
-                    "Upload a PDF to enable one-click applications."}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 gap-2">
-              <label
-                htmlFor="resume-upload"
-                className={cn(secondaryButton, "cursor-pointer")}
-              >
-                <Upload className="size-3.5" />
-                Replace
-              </label>
+            <div>
+              <FieldLabel htmlFor="new-password">New password</FieldLabel>
 
               <input
-                id="resume-upload"
-                type="file"
-                accept=".pdf"
-                className="sr-only"
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="At least 8 characters"
+                className={inputClass}
               />
+            </div>
 
-              {resumeFile ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setResumeFile(undefined)
-                    flash("Resume removed from this page.")
-                  }}
-                  className={secondaryButton}
-                >
-                  <Trash2 className="size-3.5" />
-                  Remove
-                </button>
-              ) : null}
+            <div>
+              <FieldLabel htmlFor="confirm-password">
+                Confirm new password
+              </FieldLabel>
+
+              <input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Repeat your new password"
+                className={inputClass}
+              />
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => void handleChangePassword()}
+            disabled={changingPassword}
+            className={cn(primaryButton, "mt-5")}
+          >
+            {changingPassword ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <KeyRound className="size-3.5" />
+            )}
+            {changingPassword ? "Changing..." : "Change password"}
+          </button>
+
+          <p className="mt-3 text-[11px] leading-relaxed text-[#6e6e78]">
+            Changing your password also revokes other active sessions.
+          </p>
         </SectionCard>
-      ) : null}
+      </div>
+
+      <SectionCard
+        title="Account"
+        description="Read-only details from your verified session."
+        bodyClassName="p-5"
+      >
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="rounded-lg border border-white/[0.06] bg-[#0f0f13] p-3">
+            <p className="flex items-center gap-1.5 text-[11px] text-[#7c7c86]">
+              <UserRound className="size-3.5" />
+              Name
+            </p>
+            <p className="mt-1 truncate text-[13px] font-medium text-[#ededef]">
+              {session.user.name || "—"}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-white/[0.06] bg-[#0f0f13] p-3">
+            <p className="flex items-center gap-1.5 text-[11px] text-[#7c7c86]">
+              <Mail className="size-3.5" />
+              Email
+            </p>
+            <p className="mt-1 truncate text-[13px] font-medium text-[#ededef]">
+              {session.user.email}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-white/[0.06] bg-[#0f0f13] p-3">
+            <p className="flex items-center gap-1.5 text-[11px] text-[#7c7c86]">
+              <ShieldCheck className="size-3.5" />
+              Member since
+            </p>
+            <p className="mt-1 truncate text-[13px] font-medium text-[#ededef]">
+              {memberSince}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-[11px] text-[#6e6e78]">
+            Signed in as{" "}
+            <span className="text-[#a0a0ab]">{session.user.email}</span>
+          </p>
+
+          <button
+            type="button"
+            onClick={() => void handleSignOut()}
+            className={secondaryButton}
+          >
+            <LogOut className="size-3.5" />
+            Sign out
+          </button>
+        </div>
+      </SectionCard>
     </div>
   )
 }

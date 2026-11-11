@@ -20,7 +20,15 @@ function resolveRole(
   if (pathname?.startsWith("/dashboard/admin")) return "admin"
 
   if (pathname?.startsWith("/dashboard/jobs")) {
-    return sessionRole === "admin" ? "admin" : "recruiter"
+    if (
+      sessionRole === "seeker" ||
+      sessionRole === "recruiter" ||
+      sessionRole === "admin"
+    ) {
+      return sessionRole
+    }
+
+    return "seeker"
   }
 
   if (sessionRole === "recruiter" || sessionRole === "admin") {
@@ -35,21 +43,6 @@ const roleSwitch: { role: Role; label: string }[] = [
   { role: "recruiter", label: "Recruiter" },
   { role: "admin", label: "Admin" },
 ]
-
-const sidebarCta: Record<Role, { label: string; href: string }> = {
-  seeker: {
-    label: "Complete your profile",
-    href: "/dashboard/seeker/settings",
-  },
-  recruiter: {
-    label: "Post a new job",
-    href: "/dashboard/recruiter/jobs/new",
-  },
-  admin: {
-    label: "Review platform revenue",
-    href: "/dashboard/admin/payments",
-  },
-}
 
 function UserAvatar({
   name,
@@ -92,8 +85,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const sessionRole = session?.user?.role
   const role = resolveRole(pathname, sessionRole)
 
-  const name = session?.user?.name?.trim() || roleMeta[role].demoName
-  const email = session?.user?.email || roleMeta[role].demoEmail
+  const name = session?.user?.name?.trim() || "Guest"
+  const email = session?.user?.email || "Not signed in"
   const image = session?.user?.image || null
 
   const closeMobileNav = () => setOpenPath(null)
@@ -110,12 +103,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       router.replace(`/dashboard/${userRole}`)
     }
   }, [isPending, session, role, router])
-
-  const handleLogout = async () => {
-    await authClient.signOut()
-    router.push("/")
-    router.refresh()
-  }
 
   const sidebar = (
     <SidebarContent
@@ -284,9 +271,7 @@ function SidebarContent({
   }
 
   const visibleNavItems = dashboardNav[role].filter(
-    (item) =>
-      item.label.toLowerCase() !== "my company" &&
-      item.label.toLowerCase() !== "billing"
+    (item) => item.label.toLowerCase() !== "my company"
   )
 
   return (
@@ -330,7 +315,7 @@ function SidebarContent({
         <p className="mt-2 truncate text-[11px] text-[#6e6e78]">{email}</p>
 
         <span className="mt-2 inline-flex items-center rounded-full border border-[#5c53fe]/40 bg-[#5c53fe]/15 px-2 py-0.5 text-[10px] font-medium text-[#b8b2ff]">
-          {meta.badge}
+          {meta.label}
         </span>
       </div>
 

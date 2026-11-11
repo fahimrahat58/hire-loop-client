@@ -4,10 +4,8 @@ export default function RecruiterSettingsPage() {
   return (
     <ProfileSettings
       pageTitle="Recruiter Settings"
-      description="Update your personal information and manage your account."
+      description="Update your personal information and account credentials."
       roleLabel="Recruiter"
-      showProfessional={false}
-      showResume={false}
     />
   )
 }

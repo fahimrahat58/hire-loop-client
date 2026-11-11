@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import {
   Bookmark,
@@ -9,11 +9,15 @@ import {
   CalendarClock,
   CheckCircle2,
   DollarSign,
+  Loader2,
   MapPin,
   Search,
   X,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useJobs } from "@/hooks/use-jobs"
+import { useSavedJobs } from "@/hooks/use-saved-jobs"
+import { useSeekerApplications } from "@/hooks/use-seeker-applications"
 import {
   getJobCategory,
   getJobDate,
@@ -22,6 +26,11 @@ import {
   parseSalaryMin,
   type ApiJob,
 } from "@/app/lib/jobs-api"
+import {
+  applyToJob,
+  getApplicationsErrorMessage,
+} from "@/app/lib/applications-api"
+import { getSavedJobsErrorMessage } from "@/app/lib/saved-jobs"
 import {
   Avatar,
   DashboardCard,
@@ -33,11 +42,6 @@ import {
   secondaryButton,
 } from "@/components/dashboard/ui"
 import { cn } from "@/lib/utils"
-import {
-  getSavedJobIds,
-  onSavedJobsChange,
-  toggleSavedJob,
-} from "@/app/lib/saved-jobs"
 
 const types = [
   "All",
@@ -56,25 +60,38 @@ const salaryBands = [
 ]
 
 export default function SeekerJobsPage() {
-  const { jobs: allJobs, loading, error, reload } = useJobs()
+  const {
+    jobs: allJobs,
+    loading,
+    error,
+    reload,
+    session,
+    isPending: sessionPending,
+  } = useJobs()
+
+  const {
+    savedJobs,
+    savedIds,
+    save,
+    remove,
+    pendingIds: pendingSavedIds,
+    loading: savedLoading,
+  } = useSavedJobs()
+
+  const {
+    appliedSet,
+    loading: applicationsLoading,
+    reload: reloadApplications,
+  } = useSeekerApplications(allJobs)
 
   const [query, setQuery] = useState("")
   const [type, setType] = useState("All")
   const [category, setCategory] = useState("All Categories")
   const [location, setLocation] = useState("All Locations")
   const [salary, setSalary] = useState(0)
-  const [saved, setSaved] = useState<string[]>([])
-  const [applied, setApplied] = useState<string[]>([])
   const [activeJob, setActiveJob] = useState<ApiJob | null>(null)
   const [coverLetter, setCoverLetter] = useState("")
-
-  useEffect(() => {
-    const syncSaved = () => setSaved(getSavedJobIds())
-
-    syncSaved()
-
-    return onSavedJobsChange(syncSaved)
-  }, [])
+  const [applying, setApplying] = useState(false)
 
   const categories = useMemo(
     () => ["All Categories", ...new Set(allJobs.map(getJobCategory))],
@@ -118,20 +135,94 @@ export default function SeekerJobsPage() {
     setSalary(0)
   }
 
-  const toggleSaved = (id: string) => {
-    toggleSavedJob(id)
-    setSaved(getSavedJobIds())
+  if (sessionPending) {
+    return (
+      <div className="grid gap-4 xl:grid-cols-2">
+        {[1, 2, 3, 4].map((item) => (
+          <div
+            key={item}
+            className="h-64 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.04]"
+          />
+        ))}
+      </div>
+    )
   }
 
-  const confirmApply = () => {
-    if (!activeJob) return
-
-    setApplied((current) =>
-      current.includes(activeJob._id) ? current : [...current, activeJob._id]
+  if (!session?.user) {
+    return (
+      <DashboardCard>
+        <EmptyState
+          title="Sign in to browse jobs"
+          description="Sign in with a job seeker account to save roles and submit applications."
+          action={
+            <Link href="/sign-in" className={primaryButton}>
+              Sign in
+            </Link>
+          }
+        />
+      </DashboardCard>
     )
+  }
 
-    setActiveJob(null)
-    setCoverLetter("")
+  if (session.user.role !== "seeker") {
+    return (
+      <DashboardCard>
+        <EmptyState
+          title="Job browsing is for job seekers"
+          description="Switch to a job seeker account to browse and apply for jobs."
+          action={
+            <Link href="/dashboard" className={primaryButton}>
+              Go to dashboard
+            </Link>
+          }
+        />
+      </DashboardCard>
+    )
+  }
+
+  const toggleSaved = async (id: string) => {
+    const currentlySaved = savedIds.has(id)
+
+    try {
+      if (currentlySaved) {
+        await remove(id)
+        toast.success("Job removed from saved jobs")
+      } else {
+        await save(id)
+        toast.success("Job saved successfully")
+      }
+    } catch (saveError) {
+      toast.error(getSavedJobsErrorMessage(saveError))
+    }
+  }
+
+  const confirmApply = async () => {
+    if (!activeJob || applying) return
+
+    if (!session?.user?.email || !session.user.name) {
+      toast.error("Please complete your profile before applying.")
+      return
+    }
+
+    setApplying(true)
+
+    try {
+      await applyToJob({
+        jobId: activeJob._id,
+        name: session.user.name,
+        email: session.user.email,
+        coverLetter,
+      })
+
+      toast.success("Application submitted successfully")
+      setActiveJob(null)
+      setCoverLetter("")
+      await reloadApplications({ silent: true })
+    } catch (applyError) {
+      toast.error(getApplicationsErrorMessage(applyError))
+    } finally {
+      setApplying(false)
+    }
   }
 
   return (
@@ -141,8 +232,12 @@ export default function SeekerJobsPage() {
         description="Search live opportunities, save the ones you like, and apply in a couple of clicks."
         actions={
           <span className={secondaryButton}>
-            <Bookmark className="size-3.5" />
-            {saved.length} saved
+            {savedLoading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Bookmark className="size-3.5" />
+            )}
+            {savedJobs.length} saved
           </span>
         }
       />
@@ -253,8 +348,9 @@ export default function SeekerJobsPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {jobs.map((job) => {
-            const isSaved = saved.includes(job._id)
-            const hasApplied = applied.includes(job._id)
+            const isSaved = savedIds.has(job._id)
+            const savedPending = pendingSavedIds.includes(job._id)
+            const hasApplied = appliedSet.has(job._id)
             const skills = Array.isArray(job.skills) ? job.skills : []
 
             return (
@@ -313,19 +409,22 @@ export default function SeekerJobsPage() {
                 <div className="mt-auto flex items-center gap-2 pt-5">
                   <button
                     type="button"
-                    onClick={() => toggleSaved(job._id)}
+                    onClick={() => void toggleSaved(job._id)}
+                    disabled={savedPending}
                     className={cn(
                       secondaryButton,
                       isSaved && "border-[#8f88ff]/40 text-[#b8b2ff]"
                     )}
                     aria-pressed={isSaved}
                   >
-                    {isSaved ? (
+                    {savedPending ? (
+                      <Loader2 className="size-3.5 animate-spin" />
+                    ) : isSaved ? (
                       <BookmarkCheck className="size-3.5" />
                     ) : (
                       <Bookmark className="size-3.5" />
                     )}
-                    {isSaved ? "Saved" : "Save"}
+                    {savedPending ? "Saving..." : isSaved ? "Saved" : "Save"}
                   </button>
 
                   <Link
@@ -338,7 +437,7 @@ export default function SeekerJobsPage() {
                   <button
                     type="button"
                     onClick={() => setActiveJob(job)}
-                    disabled={hasApplied}
+                    disabled={hasApplied || applicationsLoading}
                     className={cn(primaryButton, "flex-1")}
                   >
                     {hasApplied ? (
@@ -436,11 +535,16 @@ export default function SeekerJobsPage() {
 
               <button
                 type="button"
-                onClick={confirmApply}
+                onClick={() => void confirmApply()}
+                disabled={applying}
                 className={primaryButton}
               >
-                <CheckCircle2 className="size-3.5" />
-                Confirm application
+                {applying ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="size-3.5" />
+                )}
+                {applying ? "Submitting..." : "Confirm application"}
               </button>
             </div>
           </div>

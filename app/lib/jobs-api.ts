@@ -39,7 +39,9 @@ export type JobInput = {
   salary?: string
   category?: string
   description?: string
-  [key: string]: unknown
+  status?: "active" | "draft" | "closed"
+  closed?: boolean
+  deadline?: string
 }
 
 export type JobUser = {

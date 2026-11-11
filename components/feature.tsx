@@ -178,7 +178,7 @@ export default function SmartJobDiscovery() {
 
                 {!isPending && !user && (
                   <Link
-                    href="/login"
+                    href="/sign-in"
                     className="rounded-lg bg-cyan-500 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-cyan-600"
                   >
                     Login to Apply

@@ -102,182 +102,25 @@ export const roleMeta: Record<
   {
     label: string
     subtitle: string
-    badge: string
     search: string
-    demoName: string
-    demoEmail: string
   }
 > = {
   seeker: {
     label: "Job Seeker",
     subtitle: "Job Seeker Workspace",
-    badge: "Professional Tier",
     search: "Search jobs, companies, or skills...",
-    demoName: "Alex Rivera",
-    demoEmail: "alex.rivera@example.com",
   },
   recruiter: {
     label: "Recruiter",
     subtitle: "Recruiter Workspace",
-    badge: "Growth Plan",
     search: "Search jobs, candidates, or companies...",
-    demoName: "Alex Sterling",
-    demoEmail: "alex.sterling@techflow.io",
   },
   admin: {
     label: "Administrator",
     subtitle: "Admin Console",
-    badge: "Super Admin",
     search: "Search users, companies, or jobs...",
-    demoName: "Alex Sterling",
-    demoEmail: "admin@hireloop.io",
   },
 }
-
-/* ---------------------------------- seeker --------------------------------- */
-
-export const seekerProfile = {
-  name: "Alex Rivera",
-  email: "alex.rivera@example.com",
-  headline: "Senior UX/UI Designer",
-  location: "San Francisco, CA",
-  plan: "Professional Tier",
-  memberSince: "January 2024",
-  bio: "Product designer with 8+ years of experience building design systems and thoughtful, accessible experiences for fast-growing SaaS teams.",
-  skills: ["Product Design", "Design Systems", "Figma", "Prototyping", "User Research"],
-  resume: {
-    name: "Alex-Rivera-Resume.pdf",
-    meta: "PDF · 248 KB · Updated Oct 12, 2026",
-  },
-}
-
-export const seekerStats: DashboardStat[] = [
-  { label: "Saved Jobs", value: "24", hint: "3 closing this week" },
-  { label: "Applications", value: "24", hint: "6 submitted this month" },
-  { label: "Interviews", value: "3", hint: "Next one on Thursday" },
-  { label: "Offers", value: "2", hint: "1 awaiting your response" },
-]
-
-export const seekerStatusData: {
-  name: ApplicationStatus
-  value: number
-  color: string
-}[] = [
-  { name: "Applied", value: 12, color: "#60a5fa" },
-  { name: "Under Review", value: 5, color: "#f59e0b" },
-  { name: "Shortlisted", value: 4, color: "#5c53fe" },
-  { name: "Offered", value: 2, color: "#22c55e" },
-  { name: "Rejected", value: 1, color: "#ef4444" },
-]
-
-export const seekerActivity: ActivityItem[] = [
-  {
-    id: "activity-1",
-    title: "TechFlow Inc. moved your application to Shortlisted",
-    time: "2 hours ago",
-    tone: "success",
-  },
-  {
-    id: "activity-2",
-    title: "New role matches your profile: Senior Product Designer at Notion",
-    time: "5 hours ago",
-    tone: "accent",
-  },
-  {
-    id: "activity-3",
-    title: "Your application to Spotify was viewed by the hiring team",
-    time: "Yesterday",
-    tone: "info",
-  },
-  {
-    id: "activity-4",
-    title: "Interview scheduled with Linear for Friday at 2:00 PM",
-    time: "2 days ago",
-    tone: "success",
-  },
-]
-
-export const seekerApplications: SeekerApplication[] = [
-  {
-    id: "application-1",
-    title: "Senior Product Designer",
-    company: "TechFlow Inc.",
-    type: "Full-time",
-    applied: "Oct 24, 2026",
-    status: "Shortlisted",
-  },
-  {
-    id: "application-2",
-    title: "UX Designer",
-    company: "Linear",
-    type: "Full-time",
-    applied: "Oct 20, 2026",
-    status: "Under Review",
-  },
-  {
-    id: "application-3",
-    title: "Design Systems Lead",
-    company: "Notion",
-    type: "Remote",
-    applied: "Oct 18, 2026",
-    status: "Offered",
-  },
-  {
-    id: "application-4",
-    title: "Product Designer",
-    company: "Figma",
-    type: "Full-time",
-    applied: "Oct 14, 2026",
-    status: "Applied",
-  },
-  {
-    id: "application-5",
-    title: "Senior UI Designer",
-    company: "Stripe",
-    type: "Full-time",
-    applied: "Oct 08, 2026",
-    status: "Rejected",
-  },
-  {
-    id: "application-6",
-    title: "Staff Product Designer",
-    company: "Spotify",
-    type: "Remote",
-    applied: "Sep 30, 2026",
-    status: "Under Review",
-  },
-]
-
-export const seekerBillingRecords: BillingRecord[] = [
-  {
-    date: "Oct 24, 2026",
-    plan: "Professional Tier",
-    amount: "$29.00",
-    transaction: "TXN-8F2K-91LQ",
-    status: "Paid",
-  },
-  {
-    date: "Sep 24, 2026",
-    plan: "Professional Tier",
-    amount: "$29.00",
-    transaction: "TXN-7C1J-82KP",
-    status: "Paid",
-  },
-  {
-    date: "Aug 24, 2026",
-    plan: "Professional Tier",
-    amount: "$29.00",
-    transaction: "TXN-6B0H-73JN",
-    status: "Paid",
-  },
-  {
-    date: "Jul 24, 2026",
-    plan: "Professional Tier",
-    amount: "$29.00",
-    transaction: "TXN-5A9G-64IM",
-    status: "Refunded",
-  },
-]
 
 /* -------------------------------- recruiter -------------------------------- */
 
@@ -356,37 +199,6 @@ export const recruiterApplicantsPerJob: { job: string; applicants: number }[] = 
   { job: "Frontend Engineer", applicants: 36 },
   { job: "Product Manager", applicants: 24 },
   { job: "UX Researcher", applicants: 18 },
-]
-
-export const recruiterBillingRecords: BillingRecord[] = [
-  {
-    date: "Oct 01, 2026",
-    plan: "Growth Plan",
-    amount: "$49.00",
-    transaction: "TXN-9H3M-14RT",
-    status: "Paid",
-  },
-  {
-    date: "Sep 01, 2026",
-    plan: "Growth Plan",
-    amount: "$49.00",
-    transaction: "TXN-8G2L-03QS",
-    status: "Paid",
-  },
-  {
-    date: "Aug 01, 2026",
-    plan: "Growth Plan",
-    amount: "$49.00",
-    transaction: "TXN-7F1K-92PR",
-    status: "Paid",
-  },
-  {
-    date: "Jul 01, 2026",
-    plan: "Growth Plan",
-    amount: "$49.00",
-    transaction: "TXN-6E0J-81OQ",
-    status: "Refunded",
-  },
 ]
 
 /* ---------------------------------- admin ---------------------------------- */

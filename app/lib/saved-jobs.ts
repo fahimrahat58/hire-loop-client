@@ -1,98 +1,193 @@
 /**
- * Client-side bookmarks for jobs returned by the Jobs API.
+ * Typed client for the Saved Jobs API.
  *
- * There is no saved-jobs endpoint yet, so the dashboard stores the job IDs in
- * localStorage. The saved page then loads the real jobs from the API and
- * filters them with these IDs.
+ * Every request is authenticated with the Better Auth JWT. The backend
+ * resolves the seeker from the verified token, so no user id, email or role
+ * is ever read from client supplied headers here.
  */
 
-export type SavedJobEntry = {
-  id: string
-  savedAt: number
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "")
+
+export type SavedJob = {
+  _id: string
+  jobId: string
+  userId?: string
+  userEmail?: string
+  userName?: string
+  savedAt: string
+  title: string
+  company: string
+  location: string
+  salary?: string
+  category?: string
+  description?: string
+  status?: string
+  closed?: boolean
 }
 
-const SAVED_KEY = "hireloop:saved-jobs"
-const CHANGE_EVENT = "hireloop:saved-jobs-changed"
+type ApiEnvelope<T> = {
+  success?: boolean
+  message?: string
+  data?: T
+  total?: number
+}
 
-function readSavedJobs(): SavedJobEntry[] {
-  if (typeof window === "undefined") return []
+export class SavedJobsApiError extends Error {
+  status: number
+
+  constructor(message: string, status = 0) {
+    super(message)
+    this.name = "SavedJobsApiError"
+    this.status = status
+  }
+}
+
+export function getSavedJobsErrorMessage(
+  error: unknown,
+  fallback = "Something went wrong while loading saved jobs."
+) {
+  if (error instanceof SavedJobsApiError) return error.message
+  if (error instanceof Error && error.message) return error.message
+  return fallback
+}
+
+async function parseBody(response: Response) {
+  const text = await response.text()
+  if (!text) return null
 
   try {
-    const raw = window.localStorage.getItem(SAVED_KEY)
-    if (!raw) return []
-
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-
-    return parsed
-      .map((entry) => {
-        if (typeof entry === "string") {
-          return { id: entry, savedAt: 0 }
-        }
-
-        if (
-          entry &&
-          typeof entry === "object" &&
-          "id" in entry &&
-          typeof (entry as SavedJobEntry).id === "string"
-        ) {
-          return {
-            id: (entry as SavedJobEntry).id,
-            savedAt: Number((entry as SavedJobEntry).savedAt) || 0,
-          }
-        }
-
-        return null
-      })
-      .filter((entry): entry is SavedJobEntry => Boolean(entry))
+    return JSON.parse(text) as unknown
   } catch {
-    return []
+    return null
   }
 }
 
-function writeSavedJobs(entries: SavedJobEntry[]) {
-  if (typeof window === "undefined") return
+async function request(
+  path: string,
+  init: RequestInit,
+  token: string,
+  signal?: AbortSignal
+): Promise<unknown> {
+  let response: Response
 
   try {
-    window.localStorage.setItem(SAVED_KEY, JSON.stringify(entries))
-    window.dispatchEvent(new Event(CHANGE_EVENT))
-  } catch {
-    // Ignore storage failures; bookmarks remain in component state.
-  }
-}
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: {
+        ...init.headers,
+        Authorization: `Bearer ${token}`,
+      },
+      credentials: "include",
+      cache: "no-store",
+      signal: signal ?? init.signal,
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error
+    }
 
-export function getSavedJobs(): SavedJobEntry[] {
-  return readSavedJobs()
-}
-
-export function getSavedJobIds(): string[] {
-  return readSavedJobs().map((entry) => entry.id)
-}
-
-export function isJobSaved(jobId: string): boolean {
-  return readSavedJobs().some((entry) => entry.id === jobId)
-}
-
-/** Adds or removes a bookmark and returns the new saved state. */
-export function toggleSavedJob(jobId: string): boolean {
-  const entries = readSavedJobs()
-  const exists = entries.some((entry) => entry.id === jobId)
-
-  if (exists) {
-    writeSavedJobs(entries.filter((entry) => entry.id !== jobId))
-    return false
+    throw new SavedJobsApiError(
+      "Unable to reach the saved jobs service. Please try again.",
+      0
+    )
   }
 
-  writeSavedJobs([{ id: jobId, savedAt: Date.now() }, ...entries])
-  return true
+  const body = await parseBody(response)
+
+  if (
+    !response.ok ||
+    (body &&
+      typeof body === "object" &&
+      "success" in body &&
+      (body as ApiEnvelope<unknown>).success === false)
+  ) {
+    throw new SavedJobsApiError(
+      (body as ApiEnvelope<unknown> | null)?.message ||
+        `The saved jobs service returned ${response.status}.`,
+      response.status
+    )
+  }
+
+  return body
 }
 
-export function removeSavedJob(jobId: string) {
-  writeSavedJobs(readSavedJobs().filter((entry) => entry.id !== jobId))
+export async function getSavedJobs(
+  token: string,
+  signal?: AbortSignal
+): Promise<SavedJob[]> {
+  const body = await request("/api/saved-jobs", { method: "GET" }, token, signal)
+  const data = (body as ApiEnvelope<SavedJob[]> | null)?.data
+
+  if (!Array.isArray(data)) {
+    throw new SavedJobsApiError(
+      "The saved jobs service returned an unexpected response.",
+      502
+    )
+  }
+
+  return data
 }
 
-export function onSavedJobsChange(listener: () => void) {
-  if (typeof window === "undefined") return () => {}
-  window.addEventListener(CHANGE_EVENT, listener)
-  return () => window.removeEventListener(CHANGE_EVENT, listener)
+export async function checkSavedJob(
+  jobId: string,
+  token: string,
+  signal?: AbortSignal
+): Promise<boolean> {
+  const body = await request(
+    `/api/saved-jobs/check/${encodeURIComponent(jobId)}`,
+    { method: "GET" },
+    token,
+    signal
+  )
+
+  return Boolean((body as { saved?: boolean } | null)?.saved)
+}
+
+export async function saveJob(jobId: string, token: string): Promise<void> {
+  await request(
+    "/api/saved-jobs",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId }),
+    },
+    token
+  )
+}
+
+export async function removeSavedJob(
+  jobId: string,
+  token: string
+): Promise<void> {
+  await request(
+    `/api/saved-jobs/${encodeURIComponent(jobId)}`,
+    { method: "DELETE" },
+    token
+  )
+}
+
+export function getSavedJobStatus(
+  job: Pick<SavedJob, "status" | "closed">
+): "Active" | "Closed" | "Draft" {
+  if (job.status?.toLowerCase() === "draft") return "Draft"
+
+  return job.closed || job.status?.toLowerCase() === "closed"
+    ? "Closed"
+    : "Active"
+}
+
+export function getSavedJobDate(value?: string | Date | null): string {
+  if (!value) return "Recently saved"
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return "Recently saved"
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }

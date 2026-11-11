@@ -5,11 +5,7 @@ export default function AdminSettingsPage() {
     <ProfileSettings
       pageTitle="Admin Settings"
       description="Update your administrator profile and account credentials."
-      initialName="Alex Sterling"
-      initialEmail="admin@hireloop.io"
       roleLabel="Administrator"
-      showProfessional={false}
-      showResume={false}
     />
   )
 }
