@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
@@ -24,8 +25,10 @@ import {
   getJobDate,
   getJobCategory,
   getJobsErrorMessage,
+  getBillingSummary,
   type ApiJob,
   type JobUser,
+  type BillingSummary,
 } from "@/app/lib/jobs-api"
 
 import { filterManageableJobs } from "@/app/lib/job-ownership"
@@ -48,15 +51,14 @@ import {
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
-const PLAN_LIMIT = 10
-
 type DashboardJob = ApiJob & {
   status?: string
   applicants?: number
 }
 
 export default function RecruiterJobsPage() {
-  const { data: session, isPending: sessionPending } = authClient.useSession()
+  const { data: session, isPending: sessionPending } =
+    authClient.useSession()
 
   const user = session?.user
 
@@ -69,6 +71,8 @@ export default function RecruiterJobsPage() {
     : null
 
   const [jobs, setJobs] = useState<DashboardJob[]>([])
+  const [billing, setBilling] = useState<BillingSummary | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -76,18 +80,18 @@ export default function RecruiterJobsPage() {
   const [status, setStatus] = useState("All")
 
   const [processingId, setProcessingId] = useState<string | null>(null)
-  const [deleteJobTarget, setDeleteJobTarget] = useState<DashboardJob | null>(
-    null
-  )
+  const [deleteJobTarget, setDeleteJobTarget] =
+    useState<DashboardJob | null>(null)
 
   // --------------------------------
-  // FETCH JOBS
+  // FETCH JOBS AND BILLING
   // --------------------------------
 
   const loadJobs = useCallback(
     async (showLoader = true) => {
       if (!currentUser) {
         setJobs([])
+        setBilling(null)
         setLoading(false)
         return
       }
@@ -99,33 +103,45 @@ export default function RecruiterJobsPage() {
       setError(null)
 
       try {
-        console.log(
-          "API URL:",
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-        )
+        const [jobsResult, billingResult] = await Promise.allSettled([
+          getJobs({
+            user: currentUser,
+          }),
+          getBillingSummary({
+            user: currentUser,
+          }),
+        ])
 
-        console.log("CURRENT USER:", currentUser)
-
-        // AbortController / signal ব্যবহার করা হচ্ছে না।
-        // তাই page change হলে AbortError হবে না।
-        const response = await getJobs({
-          user: currentUser,
-        })
-
-        console.log("API RESPONSE:", response)
+        if (jobsResult.status === "rejected") {
+          throw jobsResult.reason
+        }
 
         const manageableJobs = filterManageableJobs(
-          response,
+          jobsResult.value,
           currentUser
         ) as DashboardJob[]
 
-        console.log("MANAGEABLE JOBS:", manageableJobs)
-
         setJobs(manageableJobs)
+
+        if (billingResult.status === "fulfilled") {
+          setBilling(billingResult.value)
+        } else {
+          setBilling(null)
+
+          console.error(
+            "BILLING SUMMARY ERROR:",
+            billingResult.reason
+          )
+        }
       } catch (err) {
         console.error("JOBS API ERROR:", err)
 
-        setError(getJobsErrorMessage(err, "Unable to load your job posts."))
+        setError(
+          getJobsErrorMessage(
+            err,
+            "Unable to load your job posts."
+          )
+        )
       } finally {
         if (showLoader) {
           setLoading(false)
@@ -157,7 +173,30 @@ export default function RecruiterJobsPage() {
     return getJobStatus(job)
   }
 
-  const activeCount = jobs.filter((job) => getStatus(job) === "Active").length
+  // --------------------------------
+  // BILLING / JOB LIMIT
+  // --------------------------------
+
+  const localActiveCount = jobs.filter(
+    (job) => getStatus(job) === "Active"
+  ).length
+
+  const activeCount =
+    billing?.publishedJobsUsed ?? localActiveCount
+
+  const isPremium = billing?.plan === "premium"
+
+  const jobLimit = billing?.publishedJobLimit ?? 5
+
+  const hasReachedLimit =
+    billing !== null &&
+    !isPremium &&
+    activeCount >= jobLimit
+
+  const remainingSlots = Math.max(
+    0,
+    jobLimit - activeCount
+  )
 
   // --------------------------------
   // SEARCH AND FILTER
@@ -167,9 +206,13 @@ export default function RecruiterJobsPage() {
     const term = query.trim().toLowerCase()
 
     return jobs.filter((job) => {
-      const jobStatus = getStatus(job)
+      const jobStatus =
+        job.status?.toLowerCase() === "draft"
+          ? "Draft"
+          : getJobStatus(job)
 
-      const matchesStatus = status === "All" || jobStatus === status
+      const matchesStatus =
+        status === "All" || jobStatus === status
 
       const matchesQuery =
         !term ||
@@ -211,7 +254,9 @@ export default function RecruiterJobsPage() {
         user: currentUser,
       })
 
-      setJobs((current) => current.filter((job) => job._id !== id))
+      setJobs((current) =>
+        current.filter((job) => job._id !== id)
+      )
 
       setDeleteJobTarget(null)
 
@@ -220,6 +265,9 @@ export default function RecruiterJobsPage() {
         description: "The job post has been removed.",
         type: "success",
       })
+
+      // Refresh actual billing usage from backend
+      await loadJobs(false)
     } catch (err) {
       console.error("DELETE JOB ERROR:", err)
 
@@ -273,7 +321,9 @@ export default function RecruiterJobsPage() {
 
   if (
     !currentUser ||
-    !["admin", "recruiter"].includes(currentUser.role?.toLowerCase() || "")
+    !["admin", "recruiter"].includes(
+      currentUser.role?.toLowerCase() || ""
+    )
   ) {
     return (
       <DashboardCard className="p-8 text-center">
@@ -309,7 +359,9 @@ export default function RecruiterJobsPage() {
             Failed to load jobs
           </h2>
 
-          <p className="max-w-md text-sm text-[#a0a0ab]">{error}</p>
+          <p className="max-w-md text-sm text-[#a0a0ab]">
+            {error}
+          </p>
 
           <button
             type="button"
@@ -334,13 +386,14 @@ export default function RecruiterJobsPage() {
         title="Manage Jobs"
         description="Create, edit and track every job post linked to your company."
         actions={
-          activeCount >= PLAN_LIMIT ? (
-            <span
-              className={cn(primaryButton, "pointer-events-none opacity-50")}
+          hasReachedLimit ? (
+            <Link
+              href="/dashboard/recruiter/billing"
+              className={primaryButton}
             >
               <Plus className="size-4" />
-              Active job limit reached
-            </span>
+              Upgrade to publish
+            </Link>
           ) : (
             <Link
               href="/dashboard/recruiter/jobs/new"
@@ -364,26 +417,53 @@ export default function RecruiterJobsPage() {
 
             <div>
               <p className="text-[13px] font-medium text-[#ededef]">
-                Growth plan usage
+                {billing?.planName || "Recruiter Plan"}
               </p>
 
               <p className="text-[11px] text-[#6e6e78]">
-                {activeCount} of {PLAN_LIMIT} active job posts used
+                {billing
+                  ? isPremium
+                    ? `${activeCount} active job posts · Unlimited`
+                    : `${activeCount} of ${jobLimit} active job posts used`
+                  : "Unable to load plan usage"}
               </p>
             </div>
           </div>
 
-          <Link href="/dashboard/recruiter/billing" className={secondaryButton}>
+          <Link
+            href="/dashboard/recruiter/billing"
+            className={secondaryButton}
+          >
             Manage plan
           </Link>
         </div>
 
-        <ProgressBar value={activeCount} max={PLAN_LIMIT} className="mt-4" />
+        {billing && !isPremium && (
+          <>
+            <ProgressBar
+              value={activeCount}
+              max={jobLimit}
+              className="mt-4"
+            />
 
-        <p className="mt-2 text-[11px] text-[#6e6e78]">
-          {Math.max(0, PLAN_LIMIT - activeCount)} slots remaining. Upgrade to
-          Enterprise for up to 50 active job posts.
-        </p>
+            <p className="mt-2 text-[11px] text-[#6e6e78]">
+              {remainingSlots} active job slots remaining.
+              Upgrade to Premium for unlimited active jobs.
+            </p>
+          </>
+        )}
+
+        {billing && isPremium && (
+          <p className="mt-4 text-[11px] text-[#86efac]">
+            Your Premium plan allows unlimited active job posts.
+          </p>
+        )}
+
+        {!billing && (
+          <p className="mt-3 text-[11px] text-amber-400">
+            Billing information is temporarily unavailable. Refresh to try again.
+          </p>
+        )}
       </DashboardCard>
 
       {/* SEARCH AND FILTER */}
@@ -415,7 +495,7 @@ export default function RecruiterJobsPage() {
 
           <button
             type="button"
-            onClick={() => void loadJobs(false)}
+            onClick={() => void loadJobs(true)}
             disabled={loading}
             aria-label="Refresh jobs"
             className={secondaryButton}
@@ -449,7 +529,9 @@ export default function RecruiterJobsPage() {
                 return (
                   <tr key={job._id} className="hover:bg-white/[0.02]">
                     <Td>
-                      <p className="font-medium text-[#ededef]">{job.title}</p>
+                      <p className="font-medium text-[#ededef]">
+                        {job.title}
+                      </p>
 
                       <p className="text-[11px] text-[#6e6e78]">
                         {getJobCategory(job)}
@@ -472,8 +554,6 @@ export default function RecruiterJobsPage() {
 
                     <Td>
                       <div className="flex flex-wrap items-center justify-end gap-1">
-                        {/* EDIT - DIRECT FORM OPEN */}
-
                         <Link
                           href={`/dashboard/recruiter/jobs/new?edit=${job._id}`}
                           className={ghostButton}
@@ -481,8 +561,6 @@ export default function RecruiterJobsPage() {
                           <Pencil className="size-3.5" />
                           Edit
                         </Link>
-
-                        {/* APPLICANTS */}
 
                         <Link
                           href={`/dashboard/recruiter/jobs/${job._id}/applicants`}
@@ -492,14 +570,15 @@ export default function RecruiterJobsPage() {
                           Applicants
                         </Link>
 
-                        {/* DELETE */}
-
                         <button
                           type="button"
                           disabled={isProcessing}
                           onClick={() => openDeleteDialog(job)}
                           aria-label={`Delete ${job.title}`}
-                          className={cn(ghostButton, "hover:text-red-400")}
+                          className={cn(
+                            ghostButton,
+                            "hover:text-red-400"
+                          )}
                         >
                           {isProcessing ? (
                             <Loader2 className="size-3.5 animate-spin" />
@@ -527,13 +606,22 @@ export default function RecruiterJobsPage() {
                 : "Create your first job post to start collecting applicants."
             }
             action={
-              <Link
-                href="/dashboard/recruiter/jobs/new"
-                className={primaryButton}
-              >
-                <Plus className="size-4" />
-                Post a new job
-              </Link>
+              hasReachedLimit ? (
+                <Link
+                  href="/dashboard/recruiter/billing"
+                  className={primaryButton}
+                >
+                  Upgrade your plan
+                </Link>
+              ) : (
+                <Link
+                  href="/dashboard/recruiter/jobs/new"
+                  className={primaryButton}
+                >
+                  <Plus className="size-4" />
+                  Post a new job
+                </Link>
+              )
             }
           />
         )}
@@ -568,14 +656,14 @@ export default function RecruiterJobsPage() {
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-[#a0a0ab]">
-              Are you sure you want to delete "{deleteJobTarget.title}"? This
-              action cannot be undone.
+              Are you sure you want to delete "{deleteJobTarget.title}"?
+              This action cannot be undone.
             </p>
 
             <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/[0.06] p-3">
               <p className="text-xs leading-5 text-red-300">
-                Warning: This job post will be permanently removed. Make sure
-                you want to continue.
+                Warning: This job post will be permanently removed.
+                Make sure you want to continue.
               </p>
             </div>
 
@@ -594,7 +682,10 @@ export default function RecruiterJobsPage() {
                 type="button"
                 disabled={!!processingId}
                 onClick={() => void remove()}
-                className={cn(primaryButton, "bg-red-600 hover:bg-red-700")}
+                className={cn(
+                  primaryButton,
+                  "bg-red-600 hover:bg-red-700"
+                )}
               >
                 {processingId ? (
                   <Loader2 className="size-4 animate-spin" />

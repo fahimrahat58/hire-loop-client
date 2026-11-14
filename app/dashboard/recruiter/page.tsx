@@ -74,6 +74,7 @@ export default function RecruiterDashboardPage() {
   // Fetch real applications from MongoDB
   const fetchApplications = useCallback(async () => {
     if (!recruiterEmail || !API_URL) {
+      setApplications([])
       setApplicationsLoading(false)
       return
     }
@@ -82,12 +83,21 @@ export default function RecruiterDashboardPage() {
       setApplicationsLoading(true)
       setApplicationsError("")
 
+      // Get Better Auth JWT token
+      const { data, error } = await authClient.token()
+
+      if (error || !data?.token) {
+        throw new Error("Authentication token not found. Please sign in again.")
+      }
+
+      // Fetch recruiter applications
       const response = await fetch(`${API_URL}/api/applications/recruiter`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
-          "x-user-email": recruiterEmail,
+          Authorization: `Bearer ${data.token}`,
         },
+        credentials: "include",
         cache: "no-store",
       })
 
@@ -201,7 +211,6 @@ export default function RecruiterDashboardPage() {
       />
 
       {/* DYNAMIC STATISTICS */}
-
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat, index) => {
           const Icon = statIcons[index]
@@ -220,7 +229,6 @@ export default function RecruiterDashboardPage() {
       </div>
 
       {/* RECENT APPLICATIONS */}
-
       <SectionCard
         title="Recent applications"
         description="Latest applications received for your job posts"
@@ -236,6 +244,7 @@ export default function RecruiterDashboardPage() {
         {pageLoading ? (
           <div className="flex min-h-48 flex-col items-center justify-center gap-3">
             <Loader2 className="size-7 animate-spin text-[#8f88ff]" />
+
             <p className="text-xs text-[#a0a0ab]">
               Loading recent applications...
             </p>
@@ -314,7 +323,6 @@ export default function RecruiterDashboardPage() {
       </SectionCard>
 
       {/* CREATE JOB BUTTON */}
-
       <Link
         href="/dashboard/recruiter/jobs/new"
         aria-label="Create job post"

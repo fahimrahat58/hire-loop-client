@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { Bell, ChevronRight, Menu, Search, Sparkles, X } from "lucide-react"
+import { Bell, ChevronRight, Loader2, Menu, Search, Sparkles, X } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
 import { roleMeta, type Role } from "@/app/lib/dashboard-data"
@@ -80,10 +80,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const [openPath, setOpenPath] = useState<string | null>(null)
 
+  // Session state is only known in the browser. Wait until after hydration
+  // before replacing the layout, otherwise the server and client trees differ.
+  const [hydrated, setHydrated] = useState(false)
+
   const mobileOpen = openPath !== null && openPath === pathname
 
   const sessionRole = session?.user?.role
   const role = resolveRole(pathname, sessionRole)
+
+  const isAdminRoute = pathname?.startsWith("/dashboard/admin") ?? false
+
+  // Never render the admin console for non-admin accounts. The API enforces
+  // this independently; this guard only prevents a flash of admin UI while
+  // the redirect runs. The page itself also refuses to fetch for non-admins.
+  const adminAccessBlocked =
+    hydrated && isAdminRoute && (isPending || sessionRole !== "admin")
 
   const name = session?.user?.name?.trim() || "Guest"
   const email = session?.user?.email || "Not signed in"
@@ -93,7 +105,30 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const openMobileNav = () => setOpenPath(pathname)
 
   useEffect(() => {
-    if (isPending || !session?.user) return
+    setHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (isPending) return
+
+    // Admin routes are only for accounts whose stored role is admin.
+    if (isAdminRoute) {
+      if (!session?.user) {
+        router.replace("/sign-in")
+
+        return
+      }
+
+      if (session.user.role !== "admin") {
+        router.replace(
+          `/dashboard/${session.user.role === "recruiter" ? "recruiter" : "seeker"}`
+        )
+      }
+
+      return
+    }
+
+    if (!session?.user) return
 
     const userRole = session.user.role
 
@@ -102,7 +137,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (userRole !== role) {
       router.replace(`/dashboard/${userRole}`)
     }
-  }, [isPending, session, role, router])
+  }, [isPending, isAdminRoute, session, role, router])
+
+  if (adminAccessBlocked) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#08080a] text-white">
+        <Loader2 className="size-6 animate-spin text-[#5c53fe]" />
+        <p className="text-xs text-[#a0a0ab]">
+          {isPending ? "Checking your session…" : "Checking admin access…"}
+        </p>
+      </div>
+    )
+  }
 
   const sidebar = (
     <SidebarContent

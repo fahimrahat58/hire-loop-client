@@ -1,6 +1,13 @@
+
+import { authClient } from "@/app/lib/auth-client"
+
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 ).replace(/\/+$/, "")
+
+// ====================================
+// TYPES
+// ====================================
 
 export type ApiJob = {
   _id: string
@@ -56,11 +63,30 @@ export type JobRequestOptions = {
   signal?: AbortSignal
 }
 
+export type BillingSummary = {
+  role?: "seeker" | "recruiter"
+  plan: "free" | "premium"
+  planName: string
+  subscriptionStatus: string
+  cancelAtPeriodEnd?: boolean
+  publishedJobsUsed: number
+  publishedJobLimit: number | null
+  remainingPublishedJobs: number | null
+  applicationsUsed?: number
+  applicationLimit?: number | null
+  remainingApplications?: number | null
+  currentPeriodEnd: string | null
+}
+
 type ApiEnvelope<T> = {
   success?: boolean
   message?: string
   data?: T
 }
+
+// ====================================
+// API ERROR
+// ====================================
 
 export class JobsApiError extends Error {
   status: number
@@ -72,21 +98,32 @@ export class JobsApiError extends Error {
   }
 }
 
-export function isJobsApiError(error: unknown): error is JobsApiError {
+export function isJobsApiError(
+  error: unknown
+): error is JobsApiError {
   return error instanceof JobsApiError
 }
 
 export function getJobsErrorMessage(
   error: unknown,
   fallback = "Something went wrong while contacting the jobs service."
-) {
+): string {
   if (error instanceof JobsApiError) return error.message
-  if (error instanceof Error && error.message) return error.message
+
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
   return fallback
 }
 
-async function parseBody(response: Response) {
+// ====================================
+// PARSE RESPONSE
+// ====================================
+
+async function parseBody(response: Response): Promise<unknown> {
   const text = await response.text()
+
   if (!text) return null
 
   try {
@@ -96,20 +133,60 @@ async function parseBody(response: Response) {
   }
 }
 
-function buildHeaders(options: JobRequestOptions, init?: RequestInit) {
+// ====================================
+// AUTHENTICATION HEADERS
+// ====================================
+
+async function buildHeaders(
+  options: JobRequestOptions,
+  init?: RequestInit
+): Promise<Headers> {
   const headers = new Headers(init?.headers)
 
-  // These headers are context only. Backend must verify auth independently.
-  if (options.user) {
-    if (options.user.id) headers.set("x-user-id", options.user.id)
-    if (options.user.email) headers.set("x-user-email", options.user.email)
-    if (options.user.role) headers.set("x-user-role", options.user.role)
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json")
   }
 
-  if (options.cookie) headers.set("cookie", options.cookie)
+  // Get Better Auth JWT in browser
+  if (typeof window !== "undefined") {
+    try {
+      const { data, error } = await authClient.token()
+
+      if (!error && data?.token) {
+        headers.set("Authorization", `Bearer ${data.token}`)
+      }
+    } catch (error) {
+      console.error("Failed to get authentication token:", error)
+    }
+  }
+
+  // User context headers
+  // Backend must verify JWT independently.
+  if (options.user) {
+    if (options.user.id) {
+      headers.set("x-user-id", options.user.id)
+    }
+
+    if (options.user.email) {
+      headers.set("x-user-email", options.user.email)
+    }
+
+    if (options.user.role) {
+      headers.set("x-user-role", options.user.role)
+    }
+  }
+
+  // Cookie forwarding for server-side requests
+  if (options.cookie) {
+    headers.set("cookie", options.cookie)
+  }
 
   return headers
 }
+
+// ====================================
+// BASE API REQUEST
+// ====================================
 
 async function request(
   path: string,
@@ -119,15 +196,21 @@ async function request(
   let response: Response
 
   try {
+    const headers = await buildHeaders(options, init)
+
     response = await fetch(`${API_URL}${path}`, {
       ...init,
-      headers: buildHeaders(options, init),
+      headers,
       credentials: "include",
       cache: "no-store",
       signal: options.signal ?? init.signal,
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
+      throw error
+    }
+
+    if (error instanceof JobsApiError) {
       throw error
     }
 
@@ -141,7 +224,7 @@ async function request(
 
   if (
     !response.ok ||
-    (body &&
+    (body !== null &&
       typeof body === "object" &&
       "success" in body &&
       (body as ApiEnvelope<unknown>).success === false)
@@ -156,18 +239,64 @@ async function request(
   return body
 }
 
+// ====================================
+// RESPONSE DATA
+// ====================================
+
 function unwrapData<T>(body: unknown): T | null {
-  if (body && typeof body === "object" && "data" in body) {
+  if (
+    body !== null &&
+    typeof body === "object" &&
+    "data" in body
+  ) {
     return (body as ApiEnvelope<T>).data ?? null
   }
 
   return body as T | null
 }
 
+// ====================================
+// BILLING SUMMARY
+// ====================================
+
+export async function getBillingSummary(
+  options: JobRequestOptions = {}
+): Promise<BillingSummary> {
+  const body = await request(
+    "/api/billing/summary",
+    {
+      method: "GET",
+    },
+    options
+  )
+
+  const data = unwrapData<BillingSummary>(body)
+
+  if (!data || typeof data !== "object") {
+    throw new JobsApiError(
+      "Unable to load billing summary.",
+      502
+    )
+  }
+
+  return data
+}
+
+// ====================================
+// GET ALL JOBS
+// ====================================
+
 export async function getJobs(
   options: JobRequestOptions = {}
 ): Promise<ApiJob[]> {
-  const body = await request("/api/jobs", { method: "GET" }, options)
+  const body = await request(
+    "/api/jobs",
+    {
+      method: "GET",
+    },
+    options
+  )
+
   const data = unwrapData<ApiJob[]>(body)
 
   if (!Array.isArray(data)) {
@@ -180,13 +309,19 @@ export async function getJobs(
   return data
 }
 
+// ====================================
+// GET SINGLE JOB
+// ====================================
+
 export async function getJob(
   id: string,
   options: JobRequestOptions = {}
 ): Promise<ApiJob> {
   const body = await request(
     `/api/jobs/${encodeURIComponent(id)}`,
-    { method: "GET" },
+    {
+      method: "GET",
+    },
     options
   )
 
@@ -199,6 +334,10 @@ export async function getJob(
   return data
 }
 
+// ====================================
+// CREATE JOB
+// ====================================
+
 export async function createJob(
   input: JobInput,
   options: JobRequestOptions = {}
@@ -207,7 +346,9 @@ export async function createJob(
     "/api/jobs",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(input),
     },
     options
@@ -215,7 +356,7 @@ export async function createJob(
 
   const data = unwrapData<ApiJob>(body)
 
-  if (!data) {
+  if (!data || typeof data !== "object") {
     throw new JobsApiError(
       (body as ApiEnvelope<ApiJob> | null)?.message ||
         "The job was created but the server did not return it.",
@@ -226,6 +367,10 @@ export async function createJob(
   return data
 }
 
+// ====================================
+// UPDATE JOB
+// ====================================
+
 export async function updateJob(
   id: string,
   input: Partial<JobInput>,
@@ -235,7 +380,9 @@ export async function updateJob(
     `/api/jobs/${encodeURIComponent(id)}`,
     {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(input),
     },
     options
@@ -244,19 +391,33 @@ export async function updateJob(
   return getJob(id, options)
 }
 
+// ====================================
+// DELETE JOB
+// ====================================
+
 export async function deleteJob(
   id: string,
   options: JobRequestOptions = {}
 ): Promise<void> {
   await request(
     `/api/jobs/${encodeURIComponent(id)}`,
-    { method: "DELETE" },
+    {
+      method: "DELETE",
+    },
     options
   )
 }
 
-export function getJobStatus(job: ApiJob): "Active" | "Closed" | "Draft" {
-  if (job.status?.toLowerCase() === "draft") return "Draft"
+// ====================================
+// JOB HELPERS
+// ====================================
+
+export function getJobStatus(
+  job: ApiJob
+): "Active" | "Closed" | "Draft" {
+  if (job.status?.toLowerCase() === "draft") {
+    return "Draft"
+  }
 
   return job.closed || job.status?.toLowerCase() === "closed"
     ? "Closed"
@@ -266,7 +427,9 @@ export function getJobStatus(job: ApiJob): "Active" | "Closed" | "Draft" {
 export function getJobType(job: ApiJob): string {
   if (job.type) return job.type
 
-  return job.location?.toLowerCase().includes("remote") ? "Remote" : "Full-time"
+  return job.location?.toLowerCase().includes("remote")
+    ? "Remote"
+    : "Full-time"
 }
 
 export function getJobCategory(job: ApiJob): string {
@@ -278,11 +441,14 @@ export function getJobDescription(job: ApiJob): string {
 }
 
 export function getJobSkills(job: ApiJob): string[] {
-  return Array.isArray(job.skills) ? job.skills.filter(Boolean) : []
+  return Array.isArray(job.skills)
+    ? job.skills.filter(Boolean)
+    : []
 }
 
 export function getJobClosing(job: ApiJob): string {
   if (job.closing) return job.closing
+
   return job.closed ? "Job closed by employer" : ""
 }
 
@@ -305,16 +471,24 @@ export function getJobDate(job: ApiJob): string {
 }
 
 export function getJobRef(job: ApiJob): string {
-  return job._id ? job._id.slice(-6).toUpperCase() : "—"
+  return job._id
+    ? job._id.slice(-6).toUpperCase()
+    : "—"
 }
+
+// ====================================
+// SALARY HELPERS
+// ====================================
 
 export function parseSalaryMin(salary?: string): number {
   if (!salary) return 0
 
   const match = salary.match(/(\d[\d,.]*)\s*([km])?/i)
+
   if (!match) return 0
 
   const amount = Number(match[1].replaceAll(",", ""))
+
   if (!Number.isFinite(amount)) return 0
 
   const unit = match[2]?.toLowerCase()
@@ -342,7 +516,9 @@ export function buildSalary(
   const format = (value?: string) => {
     const amount = Number(value)
 
-    if (!Number.isFinite(amount) || amount <= 0) return ""
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return ""
+    }
 
     return amount >= 1000
       ? `${symbol}${Math.round(amount / 1000)}k`
@@ -352,16 +528,22 @@ export function buildSalary(
   const lower = format(min)
   const upper = format(max)
 
-  if (lower && upper) return `${lower} - ${upper}`
+  if (lower && upper) {
+    return `${lower} - ${upper}`
+  }
 
   return lower || upper
 }
+
+// ====================================
+// DESCRIPTION HELPER
+// ====================================
 
 export function combineDescription(
   responsibilities: string,
   requirements: string,
   benefits: string
-) {
+): string {
   return [responsibilities, requirements, benefits]
     .map((part) => part.trim())
     .filter(Boolean)

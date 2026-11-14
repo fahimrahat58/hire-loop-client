@@ -57,15 +57,6 @@ export type RecruiterApplicant = {
   status: ApplicationStatus
 }
 
-export type AdminUser = {
-  id: string
-  name: string
-  email: string
-  role: "Seeker" | "Recruiter"
-  joined: string
-  status: "Active" | "Suspended"
-}
-
 export type AdminCompany = {
   id: string
   name: string
@@ -287,57 +278,6 @@ export const adminTransactions: AdminTransaction[] = [
     amount: "$49.00",
     date: "Oct 20, 2026",
     status: "Refunded",
-  },
-]
-
-export const adminUsers: AdminUser[] = [
-  {
-    id: "user-1",
-    name: "Alex Rivera",
-    email: "alex.rivera@example.com",
-    role: "Seeker",
-    joined: "Jan 12, 2024",
-    status: "Active",
-  },
-  {
-    id: "user-2",
-    name: "Alex Sterling",
-    email: "alex.sterling@techflow.io",
-    role: "Recruiter",
-    joined: "Mar 04, 2024",
-    status: "Active",
-  },
-  {
-    id: "user-3",
-    name: "Maya Thompson",
-    email: "maya@northstarlabs.com",
-    role: "Recruiter",
-    joined: "Jun 18, 2024",
-    status: "Active",
-  },
-  {
-    id: "user-4",
-    name: "Jamie Chen",
-    email: "jamie.chen@example.com",
-    role: "Seeker",
-    joined: "Aug 02, 2024",
-    status: "Active",
-  },
-  {
-    id: "user-5",
-    name: "Daniel Kim",
-    email: "daniel.kim@example.com",
-    role: "Seeker",
-    joined: "Sep 21, 2024",
-    status: "Suspended",
-  },
-  {
-    id: "user-6",
-    name: "Nina Alvarez",
-    email: "nina@cobaltstudio.io",
-    role: "Recruiter",
-    joined: "Oct 05, 2024",
-    status: "Active",
   },
 ]
 
