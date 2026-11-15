@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { authClient } from "@/app/lib/auth-client"
+import { resolveDashboardRole } from "@/components/shared/SessionGuard"
 
 export default function DashboardIndexPage() {
   const router = useRouter()
@@ -12,11 +13,7 @@ export default function DashboardIndexPage() {
   useEffect(() => {
     if (isPending) return
 
-    const role = session?.user?.role
-    const destination =
-      role === "admin" || role === "recruiter" ? role : "seeker"
-
-    router.replace(`/dashboard/${destination}`)
+    router.replace(`/dashboard/${resolveDashboardRole(session?.user?.role)}`)
   }, [isPending, session, router])
 
   return (
