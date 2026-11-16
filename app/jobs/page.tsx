@@ -30,7 +30,6 @@ interface Job {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
-// Normalize values before comparing
 const normalize = (value?: string) => (value || "").trim().toLowerCase()
 
 function JobsPageContent() {
@@ -42,20 +41,13 @@ function JobsPageContent() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // --------------------------------
-  // URL FILTER VALUES
-  // --------------------------------
-
   const search = searchParams.get("search") || ""
   const category = searchParams.get("category") || ""
   const type = searchParams.get("type") || ""
   const location = searchParams.get("location") || ""
   const status = searchParams.get("status") || ""
 
-  // --------------------------------
-  // UPDATE URL PARAMS
-  // --------------------------------
-
+  // UPDATE URL FILTERS
   const updateFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams.toString())
 
@@ -72,20 +64,14 @@ function JobsPageContent() {
     })
   }
 
-  // --------------------------------
-  // CLEAR ALL FILTERS
-  // --------------------------------
-
+  // CLEAR FILTERS
   const clearFilters = () => {
     router.replace(pathname, { scroll: false })
   }
 
   const hasFilters = Boolean(search || category || type || location || status)
 
-  // --------------------------------
   // FETCH JOBS
-  // --------------------------------
-
   useEffect(() => {
     const fetchJobs = async () => {
       try {
@@ -118,41 +104,27 @@ function JobsPageContent() {
     }
   }, [])
 
-  // --------------------------------
   // FILTER JOBS
-  // --------------------------------
-
   const filteredJobs = useMemo(() => {
     return jobs.filter((job) => {
-      // Normalize filter values
       const searchValue = normalize(search)
       const categoryValue = normalize(category)
       const typeValue = normalize(type)
       const locationValue = normalize(location)
       const statusValue = normalize(status)
 
-      // Normalize job data
       const title = normalize(job.title)
       const company = normalize(job.company)
       const jobLocation = normalize(job.location)
       const jobCategory = normalize(job.category)
       const description = normalize(job.description)
-
       const jobStatus = normalize(job.status)
 
-      // Support both type and jobType
       const jobType = normalize(job.type || job.jobType)
 
-      // Determine job status
       const isClosed = job.closed === true || jobStatus === "closed"
-
       const isDraft = jobStatus === "draft"
-
       const isOpen = !isClosed && !isDraft
-
-      // --------------------------------
-      // SEARCH FILTER
-      // --------------------------------
 
       const matchesSearch =
         !searchValue ||
@@ -161,33 +133,15 @@ function JobsPageContent() {
         jobLocation.includes(searchValue) ||
         description.includes(searchValue)
 
-      // --------------------------------
-      // CATEGORY FILTER
-      // --------------------------------
-
       const matchesCategory = !categoryValue || jobCategory === categoryValue
 
-      // --------------------------------
-      // JOB TYPE FILTER
-      // --------------------------------
-
-      // Old documents may not have type/jobType.
-      // For those documents, check whether location contains Remote.
       const effectiveJobType =
         jobType || (jobLocation.includes("remote") ? "remote" : "")
 
       const matchesType = !typeValue || effectiveJobType === typeValue
 
-      // --------------------------------
-      // LOCATION FILTER
-      // --------------------------------
-
       const matchesLocation =
         !locationValue || jobLocation.includes(locationValue)
-
-      // --------------------------------
-      // STATUS FILTER
-      // --------------------------------
 
       const matchesStatus =
         !statusValue ||
@@ -204,66 +158,55 @@ function JobsPageContent() {
     })
   }, [jobs, search, category, type, location, status])
 
-  // --------------------------------
   // LOADING
-  // --------------------------------
-
   if (loading) {
     return (
-      <section className="flex min-h-[60vh] items-center justify-center gap-3 text-gray-400">
+      <section className="flex min-h-[60vh] items-center justify-center gap-3 px-4 text-gray-400">
         <Loader2 className="size-6 animate-spin" />
-        Loading jobs...
+        <span className="text-sm sm:text-base">Loading jobs...</span>
       </section>
     )
   }
 
-  // --------------------------------
   // ERROR
-  // --------------------------------
-
   if (error) {
     return (
       <section className="mx-auto max-w-7xl px-4 py-16 text-center">
-        <p className="text-red-400">{error}</p>
+        <p className="text-sm break-words text-red-400 sm:text-base">{error}</p>
       </section>
     )
   }
 
-  // --------------------------------
-  // MAIN UI
-  // --------------------------------
-
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-8 text-white sm:px-6 lg:px-8 lg:py-12">
+    <section className="mx-auto w-full max-w-7xl overflow-hidden px-3 py-6 text-white sm:px-6 sm:py-8 lg:px-8 lg:py-12">
       {/* HEADER */}
-
-      <div className="mb-8">
-        <p className="text-sm font-medium text-indigo-400">
+      <div className="mb-6 sm:mb-8">
+        <p className="text-xs font-medium text-indigo-400 sm:text-sm">
           Explore Opportunities
         </p>
 
-        <h1 className="mt-2 text-3xl font-bold sm:text-4xl">All Jobs</h1>
+        <h1 className="mt-2 text-2xl font-bold sm:text-3xl lg:text-4xl">
+          All Jobs
+        </h1>
 
-        <p className="mt-3 text-sm leading-6 text-gray-400">
+        <p className="mt-2 text-xs leading-6 text-gray-400 sm:mt-3 sm:text-sm">
           Discover job opportunities posted by recruiters.
         </p>
       </div>
 
       {/* FILTER SECTION */}
-
-      <div className="mb-8 rounded-2xl border border-white/10 bg-[#1c1a1d] p-4 sm:p-5">
-        <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="mb-6 rounded-xl border border-white/10 bg-[#1c1a1d] p-3 sm:mb-8 sm:rounded-2xl sm:p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 sm:mb-5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="size-4 text-indigo-400" />
-
-            <h2 className="text-sm font-semibold">Filter Jobs</h2>
+            <h2 className="text-sm font-semibold sm:text-base">Filter Jobs</h2>
           </div>
 
           {hasFilters && (
             <button
               type="button"
               onClick={clearFilters}
-              className="flex items-center gap-1.5 text-xs font-medium text-red-400 transition hover:text-red-300"
+              className="flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-medium text-red-400 transition hover:bg-red-500/10 hover:text-red-300 sm:text-sm"
             >
               <X className="size-3.5" />
               Clear filters
@@ -271,10 +214,9 @@ function JobsPageContent() {
           )}
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
           {/* SEARCH */}
-
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="job-search"
               className="mb-2 block text-xs font-medium text-gray-400"
@@ -291,14 +233,13 @@ function JobsPageContent() {
                 value={search}
                 onChange={(e) => updateFilter("search", e.target.value)}
                 placeholder="Job title or company..."
-                className="w-full rounded-xl border border-white/10 bg-[#111014] py-3 pr-3 pl-10 text-sm text-white transition outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                className="w-full min-w-0 rounded-xl border border-white/10 bg-[#111014] py-3 pr-3 pl-10 text-sm text-white transition outline-none placeholder:text-gray-600 focus:border-indigo-500"
               />
             </div>
           </div>
 
           {/* CATEGORY */}
-
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="job-category"
               className="mb-2 block text-xs font-medium text-gray-400"
@@ -310,7 +251,7 @@ function JobsPageContent() {
               id="job-category"
               value={category}
               onChange={(e) => updateFilter("category", e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
+              className="w-full min-w-0 rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
             >
               <option value="">All Categories</option>
               <option value="Design">Design</option>
@@ -323,8 +264,7 @@ function JobsPageContent() {
           </div>
 
           {/* JOB TYPE */}
-
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="job-type"
               className="mb-2 block text-xs font-medium text-gray-400"
@@ -336,7 +276,7 @@ function JobsPageContent() {
               id="job-type"
               value={type}
               onChange={(e) => updateFilter("type", e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
+              className="w-full min-w-0 rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
             >
               <option value="">All Job Types</option>
               <option value="Full-time">Full-time</option>
@@ -348,8 +288,7 @@ function JobsPageContent() {
           </div>
 
           {/* LOCATION */}
-
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="job-location"
               className="mb-2 block text-xs font-medium text-gray-400"
@@ -366,14 +305,13 @@ function JobsPageContent() {
                 value={location}
                 onChange={(e) => updateFilter("location", e.target.value)}
                 placeholder="Search location..."
-                className="w-full rounded-xl border border-white/10 bg-[#111014] py-3 pr-3 pl-10 text-sm text-white transition outline-none placeholder:text-gray-600 focus:border-indigo-500"
+                className="w-full min-w-0 rounded-xl border border-white/10 bg-[#111014] py-3 pr-3 pl-10 text-sm text-white transition outline-none placeholder:text-gray-600 focus:border-indigo-500"
               />
             </div>
           </div>
 
           {/* STATUS */}
-
-          <div>
+          <div className="min-w-0">
             <label
               htmlFor="job-status"
               className="mb-2 block text-xs font-medium text-gray-400"
@@ -385,7 +323,7 @@ function JobsPageContent() {
               id="job-status"
               value={status}
               onChange={(e) => updateFilter("status", e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
+              className="w-full min-w-0 rounded-xl border border-white/10 bg-[#111014] px-3 py-3 text-sm text-white outline-none focus:border-indigo-500"
             >
               <option value="">All Status</option>
               <option value="open">Open</option>
@@ -396,9 +334,8 @@ function JobsPageContent() {
       </div>
 
       {/* RESULTS HEADER */}
-
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-400">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-2 sm:mb-6">
+        <p className="text-xs text-gray-400 sm:text-sm">
           Showing{" "}
           <span className="font-semibold text-white">
             {filteredJobs.length}
@@ -408,23 +345,22 @@ function JobsPageContent() {
         </p>
 
         {hasFilters && (
-          <span className="rounded-full bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-400">
+          <span className="rounded-full bg-indigo-500/10 px-3 py-1.5 text-[10px] font-medium text-indigo-400 sm:text-xs">
             Filters applied
           </span>
         )}
       </div>
 
       {/* EMPTY STATE */}
-
       {filteredJobs.length === 0 && (
-        <div className="rounded-2xl border border-white/10 bg-[#1c1a1d] px-6 py-16 text-center">
+        <div className="rounded-xl border border-white/10 bg-[#1c1a1d] px-4 py-12 text-center sm:rounded-2xl sm:px-6 sm:py-16">
           <Briefcase className="mx-auto mb-4 size-10 text-gray-500" />
 
-          <h2 className="text-xl font-semibold">
+          <h2 className="text-lg font-semibold sm:text-xl">
             {hasFilters ? "No matching jobs found" : "No jobs found"}
           </h2>
 
-          <p className="mt-2 text-sm text-gray-400">
+          <p className="mt-2 text-xs leading-6 text-gray-400 sm:text-sm">
             {hasFilters
               ? "Try changing your search or filter criteria."
               : "There are no job opportunities available right now."}
@@ -443,9 +379,8 @@ function JobsPageContent() {
       )}
 
       {/* JOB CARDS */}
-
       {filteredJobs.length > 0 && (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
           {filteredJobs.map((job) => {
             const isClosed =
               job.closed === true || normalize(job.status) === "closed"
@@ -453,21 +388,22 @@ function JobsPageContent() {
             return (
               <div
                 key={job._id}
-                className="flex flex-col rounded-2xl border border-white/10 bg-[#1c1a1d] p-5 transition duration-300 hover:-translate-y-1 hover:border-indigo-500/40 sm:p-6"
+                className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-white/10 bg-[#1c1a1d] p-4 transition duration-300 hover:border-indigo-500/40 sm:rounded-2xl sm:p-6 sm:hover:-translate-y-1"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-indigo-400">
+                {/* CARD HEADER */}
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium break-words text-indigo-400 sm:text-sm">
                       {job.company || "Company"}
                     </p>
 
-                    <h2 className="mt-2 text-xl leading-snug font-bold text-white">
+                    <h2 className="mt-2 text-lg leading-snug font-bold break-words text-white sm:text-xl">
                       {job.title}
                     </h2>
                   </div>
 
                   <span
-                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium ${
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium sm:px-3 sm:text-xs ${
                       isClosed
                         ? "bg-red-500/10 text-red-400"
                         : "bg-emerald-500/10 text-emerald-400"
@@ -477,43 +413,53 @@ function JobsPageContent() {
                   </span>
                 </div>
 
-                <div className="mt-6 flex flex-wrap gap-2 text-xs text-gray-300">
-                  <span className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2">
-                    <MapPin className="size-3.5 text-indigo-400" />
-                    {job.location || "Location not specified"}
+                {/* JOB DETAILS */}
+                <div className="mt-5 flex flex-wrap gap-2 text-xs text-gray-300 sm:mt-6">
+                  <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 break-words">
+                    <MapPin className="size-3.5 shrink-0 text-indigo-400" />
+                    <span className="break-words">
+                      {job.location || "Location not specified"}
+                    </span>
                   </span>
 
-                  <span className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2">
-                    <Briefcase className="size-3.5 text-indigo-400" />
-                    {job.category || "General"}
+                  <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 break-words">
+                    <Briefcase className="size-3.5 shrink-0 text-indigo-400" />
+                    <span className="break-words">
+                      {job.category || "General"}
+                    </span>
                   </span>
 
                   {(job.type || job.jobType) && (
-                    <span className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-2">
-                      <Briefcase className="size-3.5 text-indigo-400" />
-                      {job.type || job.jobType}
+                    <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 break-words">
+                      <Briefcase className="size-3.5 shrink-0 text-indigo-400" />
+                      <span className="break-words">
+                        {job.type || job.jobType}
+                      </span>
                     </span>
                   )}
                 </div>
 
-                <div className="mt-5 flex items-center gap-2 text-sm text-gray-300">
-                  <Banknote className="size-4 text-indigo-400" />
-                  {job.salary || "Negotiable"}
+                {/* SALARY */}
+                <div className="mt-4 flex min-w-0 items-center gap-2 text-sm break-words text-gray-300 sm:mt-5">
+                  <Banknote className="size-4 shrink-0 text-indigo-400" />
+                  <span>{job.salary || "Negotiable"}</span>
                 </div>
 
+                {/* DESCRIPTION */}
                 {job.description && (
-                  <p className="mt-5 line-clamp-3 text-sm leading-7 text-gray-400">
+                  <p className="mt-4 line-clamp-3 text-sm leading-6 break-words text-gray-400 sm:mt-5 sm:leading-7">
                     {job.description}
                   </p>
                 )}
 
-                <div className="mt-auto pt-7">
+                {/* VIEW DETAILS */}
+                <div className="mt-auto pt-5 sm:pt-7">
                   <Link
                     href={`/jobs/${job._id}`}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500"
+                    className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:border-indigo-500 hover:bg-indigo-500"
                   >
                     View Details
-                    <ArrowUpRight className="size-4" />
+                    <ArrowUpRight className="size-4 shrink-0" />
                   </Link>
                 </div>
               </div>
@@ -529,9 +475,9 @@ export default function JobsPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[60vh] items-center justify-center gap-3 text-gray-400">
+        <div className="flex min-h-[60vh] items-center justify-center gap-3 px-4 text-gray-400">
           <Loader2 className="size-6 animate-spin" />
-          Loading jobs...
+          <span className="text-sm sm:text-base">Loading jobs...</span>
         </div>
       }
     >

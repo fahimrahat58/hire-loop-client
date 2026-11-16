@@ -70,25 +70,32 @@ export default function JobDetailsPage() {
     fetchJob()
   }, [id])
 
+  // LOADING
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center gap-3 text-gray-400">
+      <div className="flex min-h-[60vh] items-center justify-center gap-3 px-4 text-gray-400">
         <Loader2 className="size-6 animate-spin" />
-        Loading job details...
+        <span className="text-sm sm:text-base">Loading job details...</span>
       </div>
     )
   }
 
+  // ERROR
   if (error || !job) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-        <h2 className="text-2xl font-bold text-white">Job not found</h2>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <h2 className="text-xl font-bold text-white sm:text-2xl">
+          Job not found
+        </h2>
 
-        <p className="text-sm text-gray-400">
+        <p className="max-w-md text-sm leading-6 break-words text-gray-400">
           {error || "This job may have been removed."}
         </p>
 
-        <Link href="/jobs" className="text-indigo-400">
+        <Link
+          href="/jobs"
+          className="rounded-lg px-4 py-2 text-sm font-medium text-indigo-400 transition hover:bg-indigo-500/10 hover:text-indigo-300"
+        >
           Browse all jobs
         </Link>
       </div>
@@ -96,83 +103,104 @@ export default function JobDetailsPage() {
   }
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-16 text-white sm:px-6">
+    <section className="mx-auto w-full max-w-5xl overflow-hidden px-3 py-6 text-white sm:px-6 sm:py-10 lg:px-8 lg:py-12">
+      {/* BACK BUTTON */}
       <button
         onClick={() => router.back()}
-        className="mb-8 flex items-center gap-2 text-sm text-gray-400 hover:text-white"
+        className="mb-5 inline-flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-gray-400 transition hover:bg-white/5 hover:text-white sm:mb-8 sm:text-sm"
       >
         <ArrowLeft className="size-4" />
         Go back
       </button>
 
-      <div className="rounded-2xl border border-white/10 bg-[#1c1a1d] p-6 sm:p-10">
-        <p className="text-sm font-medium text-indigo-400">
-          {job.company || "Company"}
-        </p>
+      {/* JOB DETAILS CARD */}
+      <div className="min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#1c1a1d] p-4 sm:rounded-2xl sm:p-6 md:p-8 lg:p-10">
+        {/* HEADER */}
+        <div className="min-w-0">
+          <p className="text-xs font-medium break-words text-indigo-400 sm:text-sm">
+            {job.company || "Company"}
+          </p>
 
-        <h1 className="mt-3 text-3xl font-bold sm:text-4xl">{job.title}</h1>
+          <h1 className="mt-2 text-2xl leading-tight font-bold break-words sm:mt-3 sm:text-3xl md:text-4xl">
+            {job.title}
+          </h1>
+        </div>
 
-        <div className="mt-6 flex flex-wrap gap-3 text-sm text-gray-300">
-          <span className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-2">
-            <MapPin className="size-4 text-indigo-400" />
-            {job.location}
+        {/* JOB INFORMATION */}
+        <div className="mt-5 flex flex-wrap gap-2 sm:mt-6 sm:gap-3">
+          <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs break-words text-gray-300 sm:px-4 sm:text-sm">
+            <MapPin className="size-4 shrink-0 text-indigo-400" />
+            <span className="break-words">
+              {job.location || "Location not specified"}
+            </span>
           </span>
 
-          <span className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-2">
-            <Briefcase className="size-4 text-indigo-400" />
-            {job.type || job.jobType || "Full-time"}
+          <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs break-words text-gray-300 sm:px-4 sm:text-sm">
+            <Briefcase className="size-4 shrink-0 text-indigo-400" />
+            <span>{job.type || job.jobType || "Full-time"}</span>
           </span>
 
-          <span className="flex items-center gap-2 rounded-full bg-white/5 px-4 py-2">
-            <Banknote className="size-4 text-indigo-400" />
-            {job.salary || "Negotiable"}
+          <span className="flex max-w-full min-w-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs break-words text-gray-300 sm:px-4 sm:text-sm">
+            <Banknote className="size-4 shrink-0 text-indigo-400" />
+            <span className="break-words">{job.salary || "Negotiable"}</span>
           </span>
         </div>
 
-        <div className="mt-10">
-          <h2 className="text-xl font-semibold">Job Description</h2>
+        {/* JOB DESCRIPTION */}
+        <div className="mt-8 border-t border-white/10 pt-6 sm:mt-10 sm:pt-8">
+          <h2 className="text-lg font-semibold sm:text-xl">Job Description</h2>
 
-          <p className="mt-4 text-sm leading-7 whitespace-pre-line text-gray-400">
-            {job.description}
+          <p className="mt-3 text-sm leading-7 break-words whitespace-pre-line text-gray-400 sm:mt-4 sm:leading-8">
+            {job.description || "No description provided."}
           </p>
         </div>
 
+        {/* REQUIREMENTS */}
         {job.requirements?.length ? (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold">Requirements</h2>
+          <div className="mt-7 sm:mt-8">
+            <h2 className="text-lg font-semibold sm:text-xl">Requirements</h2>
 
-            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-gray-400">
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-gray-400 sm:mt-4 sm:space-y-3">
               {job.requirements.map((item, index) => (
-                <li key={index}>{item}</li>
+                <li key={index} className="pl-1 break-words">
+                  {item}
+                </li>
               ))}
             </ul>
           </div>
         ) : null}
 
+        {/* RESPONSIBILITIES */}
         {job.responsibilities?.length ? (
-          <div className="mt-8">
-            <h2 className="text-xl font-semibold">Responsibilities</h2>
+          <div className="mt-7 sm:mt-8">
+            <h2 className="text-lg font-semibold sm:text-xl">
+              Responsibilities
+            </h2>
 
-            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-gray-400">
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-gray-400 sm:mt-4 sm:space-y-3">
               {job.responsibilities.map((item, index) => (
-                <li key={index}>{item}</li>
+                <li key={index} className="pl-1 break-words">
+                  {item}
+                </li>
               ))}
             </ul>
           </div>
         ) : null}
 
-        <div className="mt-10 flex flex-wrap items-center gap-3 border-t border-white/10 pt-6">
+        {/* ACTION BUTTONS */}
+        <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center sm:pt-7">
+          {/* APPLY BUTTON */}
           {job.closed ? (
             <button
               disabled
-              className="rounded-lg bg-gray-600 px-6 py-3 text-sm font-semibold text-white opacity-60"
+              className="flex min-h-11 w-full items-center justify-center rounded-lg bg-gray-600 px-6 py-3 text-sm font-semibold text-white opacity-60 sm:w-auto"
             >
               Applications Closed
             </button>
           ) : isPending ? (
             <button
               disabled
-              className="inline-flex items-center gap-2 rounded-lg bg-gray-600 px-6 py-3 text-sm text-white opacity-60"
+              className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-gray-600 px-6 py-3 text-sm text-white opacity-60 sm:w-auto"
             >
               <Loader2 className="size-4 animate-spin" />
               Loading...
@@ -182,18 +210,21 @@ export default function JobDetailsPage() {
               jobId={job._id}
               name={user.name}
               email={user.email}
-              className="px-6 py-3 text-sm"
+              className="w-full px-6 py-3 text-sm sm:w-auto"
             />
           ) : (
             <Link
               href="/sign-in"
-              className="inline-flex rounded-lg bg-cyan-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-cyan-600"
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-cyan-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-cyan-600 sm:w-auto"
             >
               Login to Apply
             </Link>
           )}
 
-          <SaveJobButton jobId={job._id} />
+          {/* SAVE JOB BUTTON */}
+          <div className="w-full sm:w-auto">
+            <SaveJobButton jobId={job._id} />
+          </div>
         </div>
       </div>
     </section>
