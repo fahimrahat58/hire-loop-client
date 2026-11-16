@@ -118,7 +118,7 @@ export default function RecruiterBillingPage() {
       }
 
       // The Stripe webhook can take a few seconds to reach the backend.
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 2000))
 
         if (cancelled) return
