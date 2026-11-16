@@ -6,7 +6,7 @@ import { db } from "./mongodb"
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
 
-  database: mongodbAdapter(await db),
+  database: mongodbAdapter(await db()),
 
   emailAndPassword: {
     enabled: true,
@@ -28,6 +28,7 @@ export const auth = betterAuth({
       create: {
         before: async (user) => {
           const role = user.role === "recruiter" ? "recruiter" : "seeker"
+
           return {
             data: { ...user, role },
           }
