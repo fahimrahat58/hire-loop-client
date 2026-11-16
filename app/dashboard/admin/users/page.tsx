@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
+import { dashboardPathForRole } from "@/app/lib/roles"
 import {
   getAdminErrorMessage,
   getAdminUsers,
@@ -136,9 +137,9 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
 
-  const [draftRoles, setDraftRoles] = useState<Record<string, AdminUserRole>>(
-    {}
-  )
+  const [draftRoles, setDraftRoles] = useState<
+    Record<string, AdminUserRole | "">
+  >({})
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
   const requestIdRef = useRef(0)
@@ -187,9 +188,11 @@ export default function AdminUsersPage() {
           Object.fromEntries(
             result.users.map((user) => [
               user.id,
-              user.role === "unknown" ? "seeker" : user.role,
+              // Unknown roles stay unselected. They are never silently turned
+              // into a seeker; the admin has to pick a role explicitly.
+              user.role === "unknown" ? "" : user.role,
             ])
-          ) as Record<string, AdminUserRole>
+          ) as Record<string, AdminUserRole | "">
         )
       } catch (requestError) {
         if (
@@ -282,11 +285,16 @@ export default function AdminUsersPage() {
   )
 
   const handleRoleUpdate = async (user: AdminUser) => {
-    const nextRole =
-      draftRoles[user.id] ?? (user.role === "unknown" ? "seeker" : user.role)
+    const nextRole = draftRoles[user.id]
 
     if (user.id === sessionUserId) {
       toast.error("You cannot change your own admin role.")
+
+      return
+    }
+
+    if (!nextRole) {
+      toast.error("Select a role before updating this user.")
 
       return
     }
@@ -320,7 +328,7 @@ export default function AdminUsersPage() {
 
       setDraftRoles((current) => ({
         ...current,
-        [user.id]: user.role === "unknown" ? "seeker" : user.role,
+        [user.id]: user.role === "unknown" ? "" : user.role,
       }))
     } finally {
       setUpdatingId(null)
@@ -344,14 +352,16 @@ export default function AdminUsersPage() {
   }
 
   if (!isPending && session?.user && sessionUserRole !== "admin") {
+    const fallbackPath = dashboardPathForRole(sessionUserRole)
+
     return (
       <DashboardCard>
         <EmptyState
           title="Admins only"
           description="Your account does not have administrator access. The server rejects admin API requests from non-admin accounts."
           action={
-            <Link href={`/dashboard/${sessionUserRole || "seeker"}`} className={primaryButton}>
-              Go to dashboard
+            <Link href={fallbackPath ?? "/"} className={primaryButton}>
+              {fallbackPath ? "Go to dashboard" : "Back to home"}
             </Link>
           }
         />
@@ -501,9 +511,9 @@ export default function AdminUsersPage() {
                 const isSelf = user.id === sessionUserId
                 const draftRole =
                   draftRoles[user.id] ??
-                  (user.role === "unknown" ? "seeker" : user.role)
+                  (user.role === "unknown" ? "" : user.role)
                 const isUpdating = updatingId === user.id
-                const hasChange = draftRole !== user.role
+                const hasChange = draftRole !== "" && draftRole !== user.role
 
                 return (
                   <tr key={user.id} className="hover:bg-white/[0.02]">
@@ -561,6 +571,9 @@ export default function AdminUsersPage() {
                           }
                           className="rounded-lg border border-white/10 bg-[#0f0f13] px-2.5 py-1.5 text-xs text-[#d4d4d8] outline-none focus:border-[#5c53fe] disabled:cursor-not-allowed disabled:opacity-50"
                         >
+                          <option value="" disabled>
+                            Select role
+                          </option>
                           {ROLE_OPTIONS.map((role) => (
                             <option key={role} value={role}>
                               {ROLE_LABELS[role]}

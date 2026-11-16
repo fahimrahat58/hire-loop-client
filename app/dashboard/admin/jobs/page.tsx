@@ -74,7 +74,7 @@ export default function AdminJobsPage() {
     setBusyId(job._id)
 
     try {
-      await deleteJob(job._id)
+      await deleteJob(job._id, { asAdmin: true })
       forgetJobOwner(job._id)
       setViewJob(null)
       await reload({ silent: true })

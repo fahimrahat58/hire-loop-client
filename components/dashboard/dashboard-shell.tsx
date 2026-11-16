@@ -1,9 +1,17 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bell, ChevronRight, Menu, Search, Sparkles, X } from "lucide-react"
+import {
+  Bell,
+  ChevronRight,
+  Loader2,
+  Menu,
+  Search,
+  Sparkles,
+  X,
+} from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
 import { roleMeta } from "@/app/lib/dashboard-data"
@@ -11,25 +19,6 @@ import { getDashboardRole, type DashboardRole } from "@/app/lib/roles"
 import { dashboardNav } from "./nav-config"
 import { Avatar } from "./ui"
 import { cn } from "@/lib/utils"
-
-function resolveRole(
-  pathname: string | null,
-  sessionRole?: string | null
-): DashboardRole {
-  if (pathname?.startsWith("/dashboard/seeker")) return "seeker"
-  if (pathname?.startsWith("/dashboard/recruiter")) return "recruiter"
-  if (pathname?.startsWith("/dashboard/admin")) return "admin"
-
-  // The session role is only used to pick the shell appearance. Route access
-  // itself is enforced by SessionGuard, which rejects invalid roles.
-  return getDashboardRole(sessionRole) ?? "seeker"
-}
-
-const roleSwitch: { role: DashboardRole; label: string }[] = [
-  { role: "seeker", label: "Seeker" },
-  { role: "recruiter", label: "Recruiter" },
-  { role: "admin", label: "Admin" },
-]
 
 function UserAvatar({
   name,
@@ -64,12 +53,23 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const { data: session, isPending } = authClient.useSession()
 
+  // Session state only exists in the browser. The server and the first client
+  // render show the loading state so hydration is stable.
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
   const [openPath, setOpenPath] = useState<string | null>(null)
 
   const mobileOpen = openPath !== null && openPath === pathname
 
-  const sessionRole = session?.user?.role
-  const role = resolveRole(pathname, sessionRole)
+  // The sidebar is driven only by the role stored on the authenticated
+  // session. Path names are never used to decide which role to render, so a
+  // visitor can never be shown another role's navigation while the session is
+  // still loading.
+  const role = getDashboardRole(session?.user?.role)
 
   const name = session?.user?.name?.trim() || "Guest"
   const email = session?.user?.email || "Not signed in"
@@ -77,6 +77,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   const closeMobileNav = () => setOpenPath(null)
   const openMobileNav = () => setOpenPath(pathname)
+
+  if (!hydrated || isPending) {
+    return <DashboardLoading message="Checking your session…" />
+  }
+
+  if (!role) {
+    // No usable role: never render a dashboard sidebar. The child route guard
+    // (or the /dashboard index) shows the sign-in or access-denied state.
+    return (
+      <div className="min-h-screen bg-[#08080a] text-white">
+        <main className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          {children}
+        </main>
+      </div>
+    )
+  }
 
   const sidebar = (
     <SidebarContent
@@ -161,29 +177,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           </form>
 
           <div className="ml-auto flex items-center gap-2">
-            {!isPending && !session?.user ? (
-              <div className="hidden items-center gap-1 rounded-lg border border-white/[0.07] bg-[#141418] p-1 md:flex">
-                <span className="px-1.5 text-[10px] font-semibold tracking-wider text-[#6e6e78] uppercase">
-                  Preview
-                </span>
-
-                {roleSwitch.map((item) => (
-                  <Link
-                    key={item.role}
-                    href={`/dashboard/${item.role}`}
-                    className={cn(
-                      "rounded-md px-2 py-1 text-[11px] font-medium transition",
-                      role === item.role
-                        ? "bg-[#232327] text-[#f4f4f5]"
-                        : "text-[#a0a0ab] hover:bg-white/[0.05] hover:text-white"
-                    )}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-
             <button
               type="button"
               aria-label="Notifications"
@@ -214,6 +207,19 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto w-full max-w-[1280px]">{children}</div>
         </main>
       </div>
+    </div>
+  )
+}
+
+function DashboardLoading({ message }: { message: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#08080a] px-6 text-center text-white"
+    >
+      <Loader2 className="size-6 animate-spin text-[#5c53fe]" />
+      <p className="max-w-md text-sm text-[#a0a0ab]">{message}</p>
     </div>
   )
 }

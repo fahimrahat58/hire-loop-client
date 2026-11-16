@@ -112,6 +112,11 @@ export const dashboardNav: Record<DashboardRole, NavItem[]> = {
       icon: Users,
     },
     {
+      label: "Manage Jobs",
+      href: "/dashboard/admin/jobs",
+      icon: BriefcaseBusiness,
+    },
+    {
       label: "Profile",
       href: "/dashboard/admin/profile",
       icon: UserRound,

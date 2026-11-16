@@ -384,16 +384,31 @@ export async function updateJob(
 // DELETE JOB
 // ====================================
 
+export type DeleteJobOptions = JobRequestOptions & {
+  /**
+   * Admin console only. Uses the admin-authorized endpoint, which lets an
+   * administrator remove any listing. Recruiter deletion keeps using the
+   * ownership-checked /api/jobs/:id endpoint.
+   */
+  asAdmin?: boolean
+}
+
 export async function deleteJob(
   id: string,
-  options: JobRequestOptions = {}
+  options: DeleteJobOptions = {}
 ): Promise<void> {
+  const { asAdmin = false, ...requestOptions } = options
+
+  const path = asAdmin
+    ? `/api/admin/jobs/${encodeURIComponent(id)}`
+    : `/api/jobs/${encodeURIComponent(id)}`
+
   await request(
-    `/api/jobs/${encodeURIComponent(id)}`,
+    path,
     {
       method: "DELETE",
     },
-    options
+    requestOptions
   )
 }
 
