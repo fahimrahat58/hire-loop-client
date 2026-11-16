@@ -1,13 +1,17 @@
 export function Globe() {
   return (
-    <div className="pointer-events-none absolute inset-0" aria-hidden="true">
-      {/* Purple halo above the rim */}
-      <div className="absolute top-[460px] left-1/2 h-[300px] w-[1200px] -translate-x-1/2 rounded-full bg-[#7c5cff]/30 blur-[90px]" />
-      <div className="absolute top-[500px] left-1/2 h-[220px] w-[900px] -translate-x-1/2 rounded-full bg-indigo-500/25 blur-[70px]" />
+    <div
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      aria-hidden="true"
+    >
+      {/* Purple Halo */}
+      <div className="absolute top-[300px] left-1/2 h-[180px] w-[600px] -translate-x-1/2 rounded-full bg-[#7c5cff]/30 blur-[70px] sm:top-[380px] sm:h-[240px] sm:w-[900px] sm:blur-[90px] lg:top-[460px] lg:h-[300px] lg:w-[1200px]" />
 
-      {/* Planet — large arc, top just above the "Assisting over…" text */}
+      <div className="absolute top-[330px] left-1/2 h-[140px] w-[450px] -translate-x-1/2 rounded-full bg-indigo-500/25 blur-[55px] sm:top-[420px] sm:h-[180px] sm:w-[700px] sm:blur-[70px] lg:top-[500px] lg:h-[220px] lg:w-[900px]" />
+
+      {/* Planet */}
       <div
-        className="absolute top-[560px] left-1/2 h-[1600px] w-[1600px] -translate-x-1/2 overflow-hidden rounded-full"
+        className="absolute top-[380px] left-1/2 h-[900px] w-[900px] -translate-x-1/2 overflow-hidden rounded-full sm:top-[460px] sm:h-[1200px] sm:w-[1200px] lg:top-[560px] lg:h-[1600px] lg:w-[1600px]"
         style={{
           background: [
             "radial-gradient(ellipse 1100px 260px at 50% 0%, rgba(196,181,253,0.65) 0%, rgba(139,92,246,0.35) 45%, transparent 72%)",
@@ -20,22 +24,26 @@ export function Globe() {
             "inset 0 24px 60px rgba(167,139,250,0.5), inset 0 -80px 120px rgba(0,0,0,0.9), 0 -8px 50px rgba(139,92,246,0.6), 0 -40px 110px rgba(99,102,241,0.4)",
         }}
       >
-        {/* Faint surface patches */}
+        {/* Surface Patches */}
         <div className="absolute top-[8%] left-[24%] h-32 w-56 rounded-full bg-slate-400/5 blur-xl" />
         <div className="absolute top-[14%] left-[38%] h-24 w-44 rounded-full bg-indigo-300/5 blur-lg" />
         <div className="absolute top-[7%] left-[56%] h-28 w-52 rounded-full bg-slate-400/5 blur-xl" />
         <div className="absolute top-[18%] left-[66%] h-20 w-36 rounded-full bg-indigo-400/5 blur-lg" />
         <div className="absolute top-[24%] left-[46%] h-16 w-48 rounded-full bg-slate-500/5 blur-xl" />
 
-        {/* Tiny stars */}
+        {/* Tiny Stars */}
         <span className="absolute top-[11%] left-[31%] h-1 w-1 rounded-full bg-white/40" />
         <span className="absolute top-[6%] left-[44%] h-0.5 w-0.5 rounded-full bg-white/30" />
         <span className="absolute top-[10%] left-[58%] h-1 w-1 rounded-full bg-white/35" />
         <span className="absolute top-[13%] left-[70%] h-0.5 w-0.5 rounded-full bg-white/25" />
         <span className="absolute top-[20%] left-[39%] h-0.5 w-0.5 rounded-full bg-white/25" />
 
-        {/* Bright rim arc — fades out at the sides */}
-        <svg viewBox="0 0 1600 1600" className="absolute inset-0 h-full w-full">
+        {/* Bright Rim Arc */}
+        <svg
+          viewBox="0 0 1600 1600"
+          preserveAspectRatio="xMidYMin meet"
+          className="absolute inset-0 h-full w-full"
+        >
           <defs>
             <linearGradient id="globe-rim" x1="0" y1="0" x2="1" y2="0">
               <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0" />
@@ -45,6 +53,7 @@ export function Globe() {
               <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
             </linearGradient>
           </defs>
+
           <circle
             cx="800"
             cy="800"
@@ -55,7 +64,7 @@ export function Globe() {
           />
         </svg>
 
-        {/* Inner glow band just below the rim */}
+        {/* Inner Glow Band */}
         <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-violet-300/40 to-transparent blur-[6px]" />
       </div>
     </div>

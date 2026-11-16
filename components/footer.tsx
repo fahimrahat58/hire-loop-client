@@ -4,15 +4,16 @@ import { Globe } from "lucide-react"
 
 export default function Footer() {
   return (
-    <footer className="relative bg-transparent py-16 text-gray-400">
+    <footer className="relative bg-transparent py-12 text-gray-400 sm:py-16">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 gap-12 lg:grid-cols-5">
+        {/* Main Footer */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:gap-x-8 sm:gap-y-12 lg:grid-cols-5">
           {/* Brand Info & Socials */}
-          <div className="flex flex-col justify-between lg:col-span-2">
+          <div className="col-span-2 flex flex-col justify-between lg:col-span-2">
             <div>
               <Link
                 href="/"
-                className="flex items-center gap-1 text-2xl font-black tracking-tight text-white"
+                className="flex w-fit items-center gap-1 text-2xl font-black tracking-tight text-white"
               >
                 <span>hireloop</span>
                 <span className="flex gap-0.5">
@@ -21,14 +22,14 @@ export default function Footer() {
                 </span>
               </Link>
 
-              <p className="mt-4 max-w-sm text-xs leading-relaxed text-gray-400">
+              <p className="mt-4 max-w-sm text-xs leading-relaxed text-gray-400 sm:text-sm">
                 The AI-native career platform. Built for people who take their
                 work seriously.
               </p>
             </div>
 
             {/* Social Icons */}
-            <div className="mt-8 flex items-center gap-5">
+            <div className="mt-7 flex items-center gap-5 sm:mt-8">
               {/* Facebook */}
               <Link
                 href="#"
@@ -37,7 +38,7 @@ export default function Footer() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-5 w-5"
+                  className="size-5"
                   fill="currentColor"
                   aria-hidden="true"
                 >
@@ -51,7 +52,7 @@ export default function Footer() {
                 aria-label="Website"
                 className="text-gray-400 transition-colors hover:text-white"
               >
-                <Globe className="h-5 w-5" />
+                <Globe className="size-5" />
               </Link>
 
               {/* LinkedIn */}
@@ -62,7 +63,7 @@ export default function Footer() {
               >
                 <svg
                   viewBox="0 0 24 24"
-                  className="h-5 w-5"
+                  className="size-5"
                   fill="currentColor"
                   aria-hidden="true"
                 >
@@ -146,10 +147,10 @@ export default function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-16 flex flex-col items-center justify-between pt-8 text-[11px] text-gray-500 sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-5 border-t border-white/10 pt-6 text-center text-[11px] text-gray-500 sm:mt-16 sm:flex-row sm:gap-4 sm:pt-8 sm:text-left">
           <p>Copyright 2024 — Programming Hero</p>
 
-          <div className="mt-4 flex items-center gap-6 sm:mt-0">
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-3 sm:gap-6">
             <Link href="#" className="transition-colors hover:text-gray-300">
               Terms & Policy
             </Link>
