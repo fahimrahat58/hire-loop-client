@@ -16,6 +16,7 @@ import {
 
 interface Plan {
   name: string
+  planId: string
   priceMonthly: string
   priceYearly: string
   description: string
@@ -27,6 +28,7 @@ interface Plan {
 const plans: Plan[] = [
   {
     name: "Starter",
+    planId: "starter",
     priceMonthly: "$0",
     priceYearly: "$0",
     description: "Everything you need to start your job search.",
@@ -40,6 +42,7 @@ const plans: Plan[] = [
   },
   {
     name: "Growth",
+    planId: "growth",
     priceMonthly: "$17",
     priceYearly: "$13",
     description: "Get more insights and accelerate your career.",
@@ -56,6 +59,7 @@ const plans: Plan[] = [
   },
   {
     name: "Premium",
+    planId: "premium",
     priceMonthly: "$99",
     priceYearly: "$79",
     description: "Advanced tools for ambitious professionals.",
@@ -263,7 +267,7 @@ export default function PricingPage() {
 
                 {/* PLAN BUTTON */}
                 <Link
-                  href="/sign-up"
+                  href={`/billing?plan=${encodeURIComponent(plan.planId)}`}
                   className={`mt-8 flex min-h-12 w-full items-center justify-between gap-2 rounded-xl px-4 py-3 text-xs font-semibold transition-all sm:mt-10 sm:px-5 sm:text-sm ${
                     plan.highlighted
                       ? "bg-white text-black shadow-lg hover:bg-gray-200"

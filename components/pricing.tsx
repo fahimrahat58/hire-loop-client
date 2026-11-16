@@ -1,10 +1,12 @@
 "use client"
 
 import React, { useState } from "react"
+import Link from "next/link"
 import { Crown, TrendingUp, Zap, Plus, ArrowRight } from "lucide-react"
 
 interface Plan {
   name: string
+  planId: string
   priceMonthly: string
   priceYearly: string
   icon: React.ElementType
@@ -15,6 +17,7 @@ interface Plan {
 const plans: Plan[] = [
   {
     name: "Starter",
+    planId: "starter",
     priceMonthly: "$0",
     priceYearly: "$0",
     icon: Crown,
@@ -27,6 +30,7 @@ const plans: Plan[] = [
   },
   {
     name: "Growth",
+    planId: "growth",
     priceMonthly: "$17",
     priceYearly: "$13",
     icon: TrendingUp,
@@ -40,6 +44,7 @@ const plans: Plan[] = [
   },
   {
     name: "Premium",
+    planId: "premium",
     priceMonthly: "$99",
     priceYearly: "$79",
     icon: Zap,
@@ -164,8 +169,8 @@ export default function Pricing() {
 
               {/* Action Button */}
               <div className="mt-8 sm:mt-10">
-                <button
-                  type="button"
+                <Link
+                  href={`/billing?plan=${encodeURIComponent(plan.planId)}`}
                   className={`flex w-full items-center justify-between gap-2 rounded-xl px-4 py-3.5 text-xs font-semibold transition-all sm:px-5 ${
                     plan.highlighted
                       ? "bg-white text-black shadow-lg hover:bg-gray-100"
@@ -174,7 +179,7 @@ export default function Pricing() {
                 >
                   <span>Choose This Plan</span>
                   <ArrowRight className="h-4 w-4 shrink-0" />
-                </button>
+                </Link>
               </div>
             </div>
           )

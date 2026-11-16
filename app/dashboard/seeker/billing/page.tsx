@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import {
   CreditCard,
@@ -62,6 +63,7 @@ async function getAuthToken() {
 
 export default function SeekerBillingPage() {
   const { data: session, isPending } = authClient.useSession()
+  const searchParams = useSearchParams()
 
   const [billing, setBilling] = useState<BillingSummary | null>(null)
   const [isLoadingBilling, setIsLoadingBilling] = useState(true)
@@ -72,6 +74,17 @@ export default function SeekerBillingPage() {
   >("idle")
 
   const checkoutHandledRef = useRef(false)
+  const selectedPlanParam = (searchParams.get("plan") || "").toLowerCase()
+  const selectedPaidPlan =
+    selectedPlanParam === "growth" || selectedPlanParam === "premium" || selectedPlanParam === "seeker_premium"
+      ? selectedPlanParam
+      : null
+  const selectedPlanName =
+    selectedPlanParam === "starter" || selectedPlanParam === "free"
+      ? "Starter"
+      : selectedPaidPlan
+        ? "Premium"
+        : null
 
   useEffect(() => {
     if (isPending) return
@@ -212,7 +225,9 @@ export default function SeekerBillingPage() {
             "Content-Type": "application/json",
           },
           credentials: "include",
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            plan: selectedPaidPlan || "premium",
+          }),
         }
       )
 
@@ -363,6 +378,22 @@ export default function SeekerBillingPage() {
               Stripe is still confirming your subscription. Refresh this page in
               a moment — Premium is activated only after the webhook is
               verified.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selectedPlanName && !isLoadingBilling && checkoutNotice === "idle" && (
+        <div className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#d4d4d8]">
+          <Info className="mt-0.5 size-4 shrink-0 text-[#a0a0ab]" />
+          <div>
+            <p className="font-medium">Selected plan: {selectedPlanName}</p>
+            <p className="mt-1 text-xs text-[#a0a0ab]">
+              {isPremium
+                ? "You already have an active Premium subscription."
+                : selectedPaidPlan
+                  ? "Complete checkout below to upgrade your account."
+                  : "You are viewing the Starter plan details for your account."}
             </p>
           </div>
         </div>

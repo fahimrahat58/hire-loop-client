@@ -66,6 +66,7 @@ export type JobRequestOptions = {
 export type BillingSummary = {
   role?: "seeker" | "recruiter"
   plan: "free" | "premium"
+  planId?: string
   planName: string
   subscriptionStatus: string
   cancelAtPeriodEnd?: boolean
@@ -76,6 +77,7 @@ export type BillingSummary = {
   applicationLimit?: number | null
   remainingApplications?: number | null
   currentPeriodEnd: string | null
+  renewalDate?: string | null
 }
 
 type ApiEnvelope<T> = {

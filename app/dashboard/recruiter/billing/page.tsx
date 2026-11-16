@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import {
   Check,
   CreditCard,
@@ -24,6 +25,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 
 export default function RecruiterBillingPage() {
   const { data: session, isPending: sessionLoading } = authClient.useSession()
+  const searchParams = useSearchParams()
 
   const [billing, setBilling] = useState<BillingSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,6 +35,19 @@ export default function RecruiterBillingPage() {
   >("idle")
 
   const checkoutHandledRef = useRef(false)
+  const selectedPlanParam = (searchParams.get("plan") || "").toLowerCase()
+  const selectedPaidPlan =
+    selectedPlanParam === "growth" ||
+    selectedPlanParam === "premium" ||
+    selectedPlanParam === "recruiter_premium"
+      ? selectedPlanParam
+      : null
+  const selectedPlanName =
+    selectedPlanParam === "starter" || selectedPlanParam === "free"
+      ? "Starter"
+      : selectedPaidPlan
+        ? "Premium"
+        : null
 
   const currentUser = session?.user as
     | (NonNullable<typeof session>["user"] & { role?: string })
@@ -160,7 +175,9 @@ export default function RecruiterBillingPage() {
             Authorization: `Bearer ${token}`,
           },
           credentials: "include",
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            plan: selectedPaidPlan || "premium",
+          }),
         }
       )
 
@@ -324,6 +341,22 @@ export default function RecruiterBillingPage() {
             <p className="mt-1 text-xs text-blue-200/80">
               Stripe is still confirming your subscription. Refresh in a moment
               — Premium is activated only after the webhook is verified.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selectedPlanName && !loading && checkoutNotice === "idle" && (
+        <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-gray-300">
+          <CreditCard size={18} className="mt-0.5 shrink-0 text-gray-400" />
+          <div>
+            <p className="font-medium">Selected plan: {selectedPlanName}</p>
+            <p className="mt-1 text-xs text-gray-400">
+              {isPremium
+                ? "You already have an active Premium subscription."
+                : selectedPaidPlan
+                  ? "Complete checkout below to upgrade your account."
+                  : "You are viewing the Starter plan details for your account."}
             </p>
           </div>
         </div>
