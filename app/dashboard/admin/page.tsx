@@ -5,43 +5,31 @@ import {
   Building2,
   BriefcaseBusiness,
   CalendarDays,
+  CreditCard,
   DollarSign,
   TrendingUp,
   Users,
 } from "lucide-react"
 
 import {
-  adminRegistrations,
-  adminStats,
-  adminTransactions,
-} from "@/app/lib/dashboard-data"
-
-import {
+  DashboardCard,
+  EmptyState,
   PageHeader,
   SectionCard,
   StatCard,
-  StatusBadge,
-  TableShell,
-  Td,
-  Th,
   secondaryButton,
 } from "@/components/dashboard/ui"
 
-import {
-  JobsByCategoryChart,
-  RegistrationsChart,
-} from "@/components/dashboard/charts"
+import { JobsByCategoryChart } from "@/components/dashboard/charts"
 
 import { PrintButton } from "@/components/dashboard/print-button"
 import { useJobs } from "@/hooks/use-jobs"
 import { getJobCategory, getJobStatus } from "@/app/lib/jobs-api"
 
-const statIcons = [Users, TrendingUp, Building2, BriefcaseBusiness, DollarSign]
-
-const statAccents = ["blue", "violet", "amber", "green", "red"] as const
-
 export default function AdminDashboardPage() {
   const { jobs, loading, error } = useJobs()
+
+  const activeJobs = jobs.filter((job) => getJobStatus(job) === "Active").length
 
   const categoryCounts: Record<string, number> = jobs.reduce(
     (counts, job) => {
@@ -54,24 +42,23 @@ export default function AdminDashboardPage() {
     {} as Record<string, number>
   )
 
-  const adminJobsByCategory: {
-    category: string
-    jobs: number
-  }[] = Object.entries(categoryCounts).map(([category, count]) => ({
-    category,
-    jobs: count,
-  }))
+  const jobsByCategory = Object.entries(categoryCounts).map(
+    ([category, count]) => ({
+      category,
+      jobs: count,
+    })
+  )
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard Overview"
-        description="Real-time platform performance and growth metrics."
+        description="Platform overview based on available backend data. Metrics without a backend API are shown as unavailable."
         actions={
           <>
             <span className={secondaryButton}>
               <CalendarDays className="size-3.5" />
-              Last 30 days
+              Live data
             </span>
 
             <PrintButton label="Export report" />
@@ -79,51 +66,140 @@ export default function AdminDashboardPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        {adminStats.map((stat, index) => (
-          <StatCard
-            key={stat.label}
-            label={stat.label}
-            value={
-              index === 3
-                ? loading
-                  ? "…"
-                  : String(
-                      jobs.filter((job) => getJobStatus(job) === "Active")
-                        .length
-                    )
-                : stat.value
-            }
-            hint={
-              index === 3
-                ? error
-                  ? "Unable to load live job totals"
-                  : "Live count from the Jobs API"
-                : stat.tone === "neutral"
-                  ? "No change vs last period"
-                  : `${stat.trend} vs last period`
-            }
-            icon={statIcons[index] ?? Users}
-            accent={statAccents[index] ?? "violet"}
-          />
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <StatCard
+          label="Active Jobs"
+          value={loading ? "…" : String(activeJobs)}
+          hint={
+            error
+              ? "Unable to load live job totals"
+              : "Live count from the Jobs API"
+          }
+          icon={BriefcaseBusiness}
+          accent="green"
+        />
+
+        <DashboardCard className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#8b8b96]">
+                Total Users
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#ededef]">
+                Unavailable
+              </p>
+              <p className="mt-1 text-xs text-[#6e6e78]">
+                No admin overview metrics API is available for platform user
+                totals or growth.
+              </p>
+            </div>
+            <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2 text-[#a0a0ab]">
+              <Users className="size-4" />
+            </span>
+          </div>
+        </DashboardCard>
+
+        <DashboardCard className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#8b8b96]">
+                Monthly Revenue
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#ededef]">
+                Unavailable
+              </p>
+              <p className="mt-1 text-xs text-[#6e6e78]">
+                No admin payments or revenue reporting API is available.
+              </p>
+            </div>
+            <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2 text-[#a0a0ab]">
+              <DollarSign className="size-4" />
+            </span>
+          </div>
+        </DashboardCard>
+
+        <DashboardCard className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#8b8b96]">
+                Companies
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#ededef]">
+                Unavailable
+              </p>
+              <p className="mt-1 text-xs text-[#6e6e78]">
+                No company management or company metrics API is available.
+              </p>
+            </div>
+            <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2 text-[#a0a0ab]">
+              <Building2 className="size-4" />
+            </span>
+          </div>
+        </DashboardCard>
+
+        <DashboardCard className="p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-[#8b8b96]">
+                Recruiter Growth
+              </p>
+              <p className="mt-2 text-sm font-medium text-[#ededef]">
+                Unavailable
+              </p>
+              <p className="mt-1 text-xs text-[#6e6e78]">
+                Growth analytics are not available from an existing backend API.
+              </p>
+            </div>
+            <span className="rounded-lg border border-white/[0.08] bg-white/[0.03] p-2 text-[#a0a0ab]">
+              <TrendingUp className="size-4" />
+            </span>
+          </div>
+        </DashboardCard>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard
           title="Job posts by category"
-          description="Distribution across the platform this month"
+          description={
+            error
+              ? "Unable to load live job distribution"
+              : "Distribution from the Jobs API"
+          }
           bodyClassName="p-4"
         >
-          <JobsByCategoryChart data={adminJobsByCategory} />
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((item) => (
+                <div
+                  key={item}
+                  className="h-10 animate-pulse rounded-lg bg-white/[0.06]"
+                />
+              ))}
+            </div>
+          ) : error ? (
+            <EmptyState
+              title="Unable to load jobs"
+              description="The Jobs API could not be reached to build the category distribution."
+            />
+          ) : jobsByCategory.length > 0 ? (
+            <JobsByCategoryChart data={jobsByCategory} />
+          ) : (
+            <EmptyState
+              title="No jobs available"
+              description="There are no job listings to summarize by category yet."
+            />
+          )}
         </SectionCard>
 
         <SectionCard
           title="New user registrations"
-          description="Daily signups over the last 30 days"
+          description="Daily signups require a backend analytics API."
           bodyClassName="p-4"
         >
-          <RegistrationsChart data={adminRegistrations} />
+          <EmptyState
+            title="Registration analytics unavailable"
+            description="The backend does not expose an admin registration analytics API, so no signup chart can be shown."
+          />
         </SectionCard>
       </div>
 
@@ -134,52 +210,25 @@ export default function AdminDashboardPage() {
             href="/dashboard/admin/payments"
             className="text-xs font-medium text-[#b8b2ff] transition hover:text-white"
           >
-            View all activity
+            View payments page
           </Link>
         }
       >
-        <TableShell>
-          <thead>
-            <tr>
-              <Th>User / Recruiter</Th>
-              <Th>Plan type</Th>
-              <Th>Transaction id</Th>
-              <Th>Amount</Th>
-              <Th>Date</Th>
-              <Th>Status</Th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {adminTransactions.map((transaction) => (
-              <tr key={transaction.id} className="hover:bg-white/[0.02]">
-                <Td>
-                  <p className="font-medium text-[#ededef]">
-                    {transaction.user}
-                  </p>
-
-                  <p className="text-[11px] text-[#6e6e78]">
-                    {transaction.company}
-                  </p>
-                </Td>
-
-                <Td>{transaction.plan}</Td>
-
-                <Td className="font-mono text-[11px]">{transaction.id}</Td>
-
-                <Td className="font-medium text-[#ededef]">
-                  {transaction.amount}
-                </Td>
-
-                <Td>{transaction.date}</Td>
-
-                <Td>
-                  <StatusBadge status={transaction.status} />
-                </Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableShell>
+        <div className="p-4">
+          <EmptyState
+            title="Transaction data unavailable"
+            description="The backend does not expose an admin transactions API, so recent subscription transactions cannot be displayed."
+            action={
+              <Link
+                href="/dashboard/admin/payments"
+                className={secondaryButton}
+              >
+                <CreditCard className="size-3.5" />
+                Open payments
+              </Link>
+            }
+          />
+        </div>
       </SectionCard>
     </div>
   )

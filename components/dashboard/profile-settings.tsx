@@ -1,20 +1,24 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Check,
+  ImagePlus,
   KeyRound,
   Loader2,
   LogOut,
   Mail,
   ShieldCheck,
+  Trash2,
+  Upload,
   UserRound,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { authClient } from "@/app/lib/auth-client"
+import { bearerHeaders, getAuthToken } from "@/app/lib/auth-token"
 import {
   Avatar,
   DashboardCard,
@@ -40,15 +44,36 @@ interface ProfileSettingsProps {
   showSecurity?: boolean
 }
 
-function isValidImageUrl(value: string) {
-  if (!value) return true
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "")
 
-  try {
-    const parsed = new URL(value)
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
-  } catch {
-    return false
-  }
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+])
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result)
+        return
+      }
+
+      reject(new Error("Failed to read the selected image."))
+    }
+
+    reader.onerror = () => {
+      reject(new Error("Failed to read the selected image."))
+    }
+
+    reader.readAsDataURL(file)
+  })
 }
 
 export function ProfileSettings({
@@ -62,7 +87,10 @@ export function ProfileSettings({
   const { data: session, isPending, refetch } = authClient.useSession()
 
   const [name, setName] = useState("")
-  const [imageUrl, setImageUrl] = useState("")
+  const [savedImage, setSavedImage] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
 
   const [currentPassword, setCurrentPassword] = useState("")
@@ -70,21 +98,148 @@ export function ProfileSettings({
   const [confirmPassword, setConfirmPassword] = useState("")
   const [changingPassword, setChangingPassword] = useState(false)
 
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
   useEffect(() => {
     if (!session?.user) return
 
     setName(session.user.name || "")
-    setImageUrl(session.user.image || "")
+    setSavedImage(session.user.image || null)
   }, [session])
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl)
+      }
+    }
+  }, [previewUrl])
+
+  const clearSelectedImage = () => {
+    if (previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl)
+    }
+
+    setSelectedFile(null)
+    setPreviewUrl(null)
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+
+    if (!file) return
+
+    if (!ALLOWED_IMAGE_TYPES.has(file.type)) {
+      toast.error("Please select a JPEG, JPG, PNG, or WebP image.")
+      event.target.value = ""
+      return
+    }
+
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image is too large. Maximum allowed size is 5 MB.")
+      event.target.value = ""
+      return
+    }
+
+    if (previewUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl)
+    }
+
+    setSelectedFile(file)
+    setPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handleUploadImage = async () => {
+    if (!selectedFile) {
+      toast.error("Please select a profile image to upload.")
+      return
+    }
+
+    setUploadingImage(true)
+
+    try {
+      const token = await getAuthToken()
+      const imageData = await readFileAsDataUrl(selectedFile)
+
+      const response = await fetch(`${API_URL}/api/users/me/profile-image`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...bearerHeaders(token),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          image: imageData,
+          mimeType: selectedFile.type,
+        }),
+      })
+
+      const body = (await response.json().catch(() => null)) as
+        | { success?: boolean; message?: string; data?: { image?: string } }
+        | null
+
+      if (!response.ok || body?.success === false) {
+        throw new Error(
+          body?.message || "Failed to upload the profile image."
+        )
+      }
+
+      const uploadedImage = body?.data?.image
+
+      if (uploadedImage) {
+        setSavedImage(uploadedImage)
+      }
+
+      clearSelectedImage()
+      await refetch()
+      router.refresh()
+      toast.success("Profile image updated successfully.")
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to upload the profile image."
+      )
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
+  const handleRemoveImage = async () => {
+    setUploadingImage(true)
+
+    try {
+      const result = await authClient.updateUser({
+        image: null,
+      })
+
+      if (result.error) {
+        throw new Error(result.error.message || "Failed to remove image.")
+      }
+
+      setSavedImage(null)
+      clearSelectedImage()
+      await refetch()
+      router.refresh()
+      toast.success("Profile image removed.")
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to remove the profile image."
+      )
+    } finally {
+      setUploadingImage(false)
+    }
+  }
 
   const handleUpdateProfile = async () => {
     if (!name.trim()) {
       toast.error("Please enter your full name.")
-      return
-    }
-
-    if (!isValidImageUrl(imageUrl.trim())) {
-      toast.error("Please enter a valid image URL starting with http or https.")
       return
     }
 
@@ -93,7 +248,6 @@ export function ProfileSettings({
     try {
       const result = await authClient.updateUser({
         name: name.trim(),
-        image: imageUrl.trim() || null,
       })
 
       if (result.error) {
@@ -208,6 +362,8 @@ export function ProfileSettings({
       )
     : "—"
 
+  const displayImage = previewUrl || savedImage
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -223,8 +379,8 @@ export function ProfileSettings({
           <p className="font-medium">Only supported account fields are shown</p>
           <p className="mt-0.5 text-[12px] text-[#a79fff]">
             {showSecurity
-              ? "Name, profile image, and password are handled by Better Auth. The backend does not store headline, bio, skills, resume, notification preferences, or job preferences, so those fields are not presented as working settings."
-              : "Name and profile image are handled by Better Auth. The backend does not store headline, bio, skills, resume, notification preferences, or job preferences, so those fields are not presented as working settings."}
+              ? "Name, profile image, and password are handled by supported account flows. Profile images are uploaded securely to ImgBB through the backend and saved to your user record."
+              : "Name and profile image are handled by supported account flows. Profile images are uploaded securely to ImgBB through the backend and saved to your user record."}
           </p>
         </div>
       </div>
@@ -237,36 +393,78 @@ export function ProfileSettings({
           description="This is how you appear across HireLoop."
           bodyClassName="p-5"
         >
-          <div className="flex items-center gap-4">
-            {imageUrl ? (
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            {displayImage ? (
               <img
-                src={imageUrl}
+                src={displayImage}
                 alt={name || "Profile"}
-                className="size-16 shrink-0 rounded-full border border-white/10 object-cover"
-                onError={(event) => {
-                  event.currentTarget.style.display = "none"
-                }}
+                className="size-20 shrink-0 rounded-full border border-white/10 object-cover"
               />
             ) : (
-              <Avatar name={name || "User"} size="xl" />
+              <Avatar name={name || session.user.name || "User"} size="xl" />
             )}
 
             <div className="min-w-0 flex-1">
-              <FieldLabel htmlFor="profile-image">Profile image URL</FieldLabel>
+              <FieldLabel htmlFor="profile-image-file">Profile picture</FieldLabel>
 
               <input
-                id="profile-image"
-                type="url"
-                value={imageUrl}
-                onChange={(event) => setImageUrl(event.target.value)}
-                placeholder="https://example.com/profile.jpg"
-                className={inputClass}
+                ref={fileInputRef}
+                id="profile-image-file"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleImageSelect}
+                className={cn(inputClass, "py-2 file:mr-3 file:rounded-md file:border-0 file:bg-white/[0.08] file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-[#ededef]")}
               />
 
               <p className="mt-2 text-[11px] text-[#6e6e78]">
-                Paste a public image URL, or leave it empty to use your
-                initials.
+                Choose a JPEG, JPG, PNG, or WebP image up to 5 MB. A preview is shown before upload.
               </p>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleUploadImage()}
+                  disabled={uploadingImage || !selectedFile}
+                  className={primaryButton}
+                >
+                  {uploadingImage ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="size-3.5" />
+                  )}
+                  {uploadingImage ? "Uploading..." : "Upload image"}
+                </button>
+
+                {selectedFile ? (
+                  <button
+                    type="button"
+                    onClick={clearSelectedImage}
+                    disabled={uploadingImage}
+                    className={secondaryButton}
+                  >
+                    <ImagePlus className="size-3.5" />
+                    Clear selection
+                  </button>
+                ) : null}
+
+                {!selectedFile && savedImage ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveImage()}
+                    disabled={uploadingImage}
+                    className={secondaryButton}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Remove image
+                  </button>
+                ) : null}
+              </div>
+
+              {selectedFile ? (
+                <p className="mt-2 text-[11px] text-[#a0a0ab]">
+                  Selected: {selectedFile.name}
+                </p>
+              ) : null}
             </div>
           </div>
 

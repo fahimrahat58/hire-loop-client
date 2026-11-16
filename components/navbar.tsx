@@ -39,12 +39,31 @@ export function Navbar() {
       <div className="flex items-center gap-4">
         {!isPending && session?.user ? (
           <>
-            <span className="hidden text-sm font-medium text-gray-200 sm:block">
-              Welcome,{" "}
-              <span className="font-semibold text-white">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2 text-sm font-medium text-gray-200 transition hover:text-white"
+            >
+              {session.user.image ? (
+                <img
+                  src={session.user.image}
+                  alt={`${session.user.name || "User"}'s profile`}
+                  referrerPolicy="no-referrer"
+                  className="size-8 rounded-full border border-white/10 object-cover"
+                />
+              ) : (
+                <span className="inline-flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[#5c53fe] to-[#8f88ff] text-[11px] font-semibold text-white ring-2 ring-white/10">
+                  {(session.user.name || "U")
+                    .split(" ")
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .map((part) => part[0]?.toUpperCase())
+                    .join("") || "U"}
+                </span>
+              )}
+              <span className="hidden font-semibold text-white sm:block">
                 {session.user.name}
               </span>
-            </span>
+            </Link>
 
             <button
               onClick={handleLogout}

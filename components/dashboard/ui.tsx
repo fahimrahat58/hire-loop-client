@@ -181,10 +181,12 @@ export const ghostButton =
 
 export function Avatar({
   name,
+  image,
   size = "md",
   className,
 }: {
   name: string
+  image?: string | null
   size?: "sm" | "md" | "lg" | "xl"
   className?: string
 }) {
@@ -202,7 +204,7 @@ export function Avatar({
     .map((part) => part[0]?.toUpperCase())
     .join("")
 
-  return (
+  const fallback = (
     <span
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#5c53fe] to-[#8f88ff] font-semibold text-white ring-2 ring-white/10",
@@ -212,6 +214,34 @@ export function Avatar({
       aria-hidden="true"
     >
       {initials || "HL"}
+    </span>
+  )
+
+  if (!image) {
+    return fallback
+  }
+
+  return (
+    <span className={cn("relative inline-flex shrink-0", className)}>
+      <span className="hidden">{fallback}</span>
+      <img
+        src={image}
+        alt={`${name}'s profile`}
+        referrerPolicy="no-referrer"
+        className={cn(
+          "shrink-0 rounded-full border border-white/10 object-cover ring-2 ring-white/10",
+          sizes[size]
+        )}
+        onError={(event) => {
+          const wrapper = event.currentTarget.parentElement
+          if (!wrapper) return
+          event.currentTarget.remove()
+          const hiddenFallback = wrapper.querySelector("span")
+          if (hiddenFallback instanceof HTMLElement) {
+            hiddenFallback.classList.remove("hidden")
+          }
+        }}
+      />
     </span>
   )
 }

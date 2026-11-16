@@ -519,7 +519,7 @@ export default function AdminUsersPage() {
                   <tr key={user.id} className="hover:bg-white/[0.02]">
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <Avatar name={user.name} size="sm" />
+                        <Avatar name={user.name} image={user.image} size="sm" />
                         <div className="min-w-0">
                           <p className="truncate font-medium text-[#ededef]">
                             {user.name}
