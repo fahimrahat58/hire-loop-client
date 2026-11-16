@@ -5,7 +5,6 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ArrowLeft, Users } from "lucide-react"
 
-import { authClient } from "@/app/lib/auth-client"
 import {
   getJob,
   getJobStatus,
@@ -26,7 +25,6 @@ import { ApplicantsTable } from "@/components/dashboard/applicants-table"
 
 export default function JobApplicantsPage() {
   const { jobId } = useParams<{ jobId: string }>()
-  const { data: session } = authClient.useSession()
 
   const [job, setJob] = useState<ApiJob | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,13 +34,6 @@ export default function JobApplicantsPage() {
     const controller = new AbortController()
 
     getJob(jobId, {
-      user: session?.user
-        ? {
-            id: session.user.id,
-            email: session.user.email,
-            role: session.user.role,
-          }
-        : null,
       signal: controller.signal,
     })
       .then(setJob)
@@ -56,7 +47,7 @@ export default function JobApplicantsPage() {
       })
 
     return () => controller.abort()
-  }, [jobId, session])
+  }, [jobId])
 
   if (loading) {
     return (

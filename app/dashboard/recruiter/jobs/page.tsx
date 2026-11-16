@@ -104,12 +104,8 @@ export default function RecruiterJobsPage() {
 
       try {
         const [jobsResult, billingResult] = await Promise.allSettled([
-          getJobs({
-            user: currentUser,
-          }),
-          getBillingSummary({
-            user: currentUser,
-          }),
+          getJobs(),
+          getBillingSummary(),
         ])
 
         if (jobsResult.status === "rejected") {
@@ -250,9 +246,7 @@ export default function RecruiterJobsPage() {
     setProcessingId(id)
 
     try {
-      await deleteJob(id, {
-        user: currentUser,
-      })
+      await deleteJob(id)
 
       setJobs((current) =>
         current.filter((job) => job._id !== id)

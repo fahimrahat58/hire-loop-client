@@ -5,34 +5,34 @@ import { usePathname, useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
-
-export type DashboardRole = "seeker" | "recruiter" | "admin"
+import {
+  dashboardPathForRole,
+  getDashboardRole,
+  type DashboardRole,
+} from "@/app/lib/roles"
 
 const SIGN_IN_PATH = "/sign-in"
-
-/**
- * Dashboard areas are limited to the three roles stored on the Better Auth user
- * document. A missing or unrecognised role is treated as "seeker", which is the
- * same default used when an account is created, so a bad value can never grant
- * recruiter or admin access.
- */
-export function resolveDashboardRole(role: unknown): DashboardRole {
-  return role === "admin" || role === "recruiter" ? role : "seeker"
-}
 
 /**
  * Protects a dashboard area using the role from the authenticated Better Auth
  * session. Nothing is rendered until the session has been checked, and the
  * children are only mounted when the session role matches `requiredRole`.
  *
+ * Passing an array allows a shared area (for example a job details page) to be
+ * opened by more than one role. Omitting `requiredRole` only requires a valid
+ * dashboard role.
+ *
  * The role always comes from `authClient.useSession()`. URL parameters, form
  * input, local storage and custom headers are never consulted.
+ *
+ * A signed-in account with a missing or unrecognised role is denied dashboard
+ * access instead of being treated as a seeker.
  */
 export function SessionGuard({
   requiredRole,
   children,
 }: {
-  requiredRole: DashboardRole
+  requiredRole?: DashboardRole | DashboardRole[]
   children: React.ReactNode
 }) {
   const pathname = usePathname()
@@ -50,8 +50,16 @@ export function SessionGuard({
 
   const user = session?.user
   const isAuthenticated = Boolean(user)
-  const role = resolveDashboardRole(user?.role)
-  const isAuthorized = isAuthenticated && role === requiredRole
+  const role = getDashboardRole(user?.role)
+  const allowedRoles = requiredRole
+    ? Array.isArray(requiredRole)
+      ? requiredRole
+      : [requiredRole]
+    : null
+  const isAuthorized = Boolean(
+    isAuthenticated && role && (!allowedRoles || allowedRoles.includes(role))
+  )
+  const ownDashboard = dashboardPathForRole(user?.role)
 
   // Signed-out visitors go to sign-in; signed-in visitors who opened a
   // different role's area go to their own dashboard. `null` means no redirect.
@@ -59,7 +67,7 @@ export function SessionGuard({
     ? SIGN_IN_PATH
     : isAuthorized
       ? null
-      : `/dashboard/${role}`
+      : ownDashboard
 
   useEffect(() => {
     if (!hydrated || isPending || !redirectTo) return
@@ -71,20 +79,62 @@ export function SessionGuard({
     router.replace(redirectTo)
   }, [hydrated, isPending, redirectTo, pathname, router])
 
-  if (!hydrated || isPending || !isAuthorized) {
+  if (!hydrated || isPending) {
+    return <GuardStatus message="Checking your session…" />
+  }
+
+  if (!isAuthenticated || !isAuthorized) {
+    if (isAuthenticated && !role) {
+      return (
+        <GuardStatus message="We could not verify a valid dashboard role for this account. Sign in again or contact an administrator.">
+          <button
+            type="button"
+            onClick={() => {
+              void authClient
+                .signOut()
+                .then(() => router.replace(SIGN_IN_PATH))
+            }}
+            className="rounded-lg bg-[#5c53fe] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#4b43e8]"
+          >
+            Sign out and sign in
+          </button>
+        </GuardStatus>
+      )
+    }
+
     return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-[#08080a] text-white"
-      >
-        <Loader2 className="size-6 animate-spin text-[#5c53fe]" />
-        <p className="text-sm text-[#a0a0ab]">
-          {!hydrated || isPending ? "Checking your session…" : "Redirecting…"}
-        </p>
-      </div>
+      <GuardStatus
+        message={
+          !isAuthenticated
+            ? "Redirecting to sign in…"
+            : "Redirecting to your dashboard…"
+        }
+      />
     )
   }
 
   return <>{children}</>
 }
+
+function GuardStatus({
+  message,
+  children,
+}: {
+  message: string
+  children?: React.ReactNode
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-[#08080a] px-6 text-center text-white"
+    >
+      <Loader2 className="size-6 animate-spin text-[#5c53fe]" />
+      <p className="max-w-md text-sm text-[#a0a0ab]">{message}</p>
+      {children}
+    </div>
+  )
+}
+
+export { dashboardPathForRole, getDashboardRole }
+export type { DashboardRole }

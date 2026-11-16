@@ -6,6 +6,8 @@
  * is ever read from client supplied headers here.
  */
 
+import { getHttpErrorMessage } from "@/app/lib/api-errors"
+
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 ).replace(/\/+$/, "")
@@ -48,8 +50,12 @@ export function getSavedJobsErrorMessage(
   error: unknown,
   fallback = "Something went wrong while loading saved jobs."
 ) {
-  if (error instanceof SavedJobsApiError) return error.message
+  if (error instanceof SavedJobsApiError) {
+    return getHttpErrorMessage(error.status, fallback, error.message)
+  }
+
   if (error instanceof Error && error.message) return error.message
+
   return fallback
 }
 

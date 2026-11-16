@@ -16,46 +16,22 @@ import {
 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
+import {
+  APPLICATION_STATUSES,
+  getApplicationsErrorMessage,
+  getRecruiterJobApplicants,
+  updateRecruiterApplicationStatus,
+  type ApplicationStatus,
+  type RecruiterApplication,
+  type RecruiterJobInfo,
+} from "@/app/lib/applications-api"
 import { toast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+const STATUS_OPTIONS = [...APPLICATION_STATUSES]
 
-const STATUS_OPTIONS = [
-  "Applied",
-  "Under Review",
-  "Shortlisted",
-  "Offered",
-  "Rejected",
-]
-
-type Application = {
-  id: string
-  jobId: string
-  name: string
-  email: string
-  role: string
-  company?: string
-  applied: string
-  experience: string
-  resumeUrl: string
-  coverLetter: string
-  status: string
-}
-
-type JobInfo = {
-  id: string
-  title: string
-  company: string
-}
-
-type ApiResponse = {
-  success: boolean
-  message?: string
-  data: Application[]
-  total: number
-  job?: JobInfo
-}
+type Application = RecruiterApplication
+type JobInfo = RecruiterJobInfo
 
 const statusStyles: Record<string, string> = {
   Applied: "border-blue-500/20 bg-blue-500/10 text-blue-400",
@@ -101,45 +77,33 @@ export default function JobApplicantsPage() {
   // FETCH APPLICANTS FOR THIS JOB
   // --------------------------------
 
-  const loadApplicants = useCallback(async () => {
-    if (!user?.email || !jobId) return
+  const loadApplicants = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!jobId) return
 
-    setLoading(true)
-    setError("")
+      setLoading(true)
+      setError("")
 
-    try {
-      const response = await fetch(
-        `${API_URL}/api/applications/recruiter/${jobId}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            "x-user-email": user.email,
-          },
-          cache: "no-store",
-        }
-      )
+      try {
+        const result = await getRecruiterJobApplicants(jobId, signal)
 
-      const result: ApiResponse = await response.json()
+        setApplications(result.applications)
+        setJob(result.job)
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Unable to load applicants.")
+        setError(
+          getApplicationsErrorMessage(
+            err,
+            "Something went wrong while loading applicants."
+          )
+        )
+      } finally {
+        if (!signal?.aborted) setLoading(false)
       }
-
-      setApplications(result.data || [])
-      setJob(result.job || null)
-    } catch (err) {
-      console.error("JOB APPLICANTS ERROR:", err)
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while loading applicants."
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [user?.email, jobId])
+    },
+    [jobId]
+  )
 
   useEffect(() => {
     if (sessionPending) return
@@ -149,40 +113,27 @@ export default function JobApplicantsPage() {
       return
     }
 
-    void loadApplicants()
+    const controller = new AbortController()
+
+    void loadApplicants(controller.signal)
+
+    return () => controller.abort()
   }, [sessionPending, user?.email, loadApplicants])
 
   // --------------------------------
   // UPDATE APPLICATION STATUS
   // --------------------------------
 
-  const updateStatus = async (applicationId: string, newStatus: string) => {
-    if (!user?.email || processingId) return
+  const updateStatus = async (
+    applicationId: string,
+    newStatus: ApplicationStatus
+  ) => {
+    if (processingId) return
 
     setProcessingId(applicationId)
 
     try {
-      const response = await fetch(
-        `${API_URL}/api/applications/${applicationId}/status`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            "x-user-email": user.email,
-          },
-          body: JSON.stringify({
-            status: newStatus,
-          }),
-        }
-      )
-
-      const result = await response.json()
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.message || "Unable to update application status."
-        )
-      }
+      await updateRecruiterApplicationStatus(applicationId, newStatus)
 
       setApplications((current) =>
         current.map((application) =>
@@ -198,12 +149,12 @@ export default function JobApplicantsPage() {
         type: "success",
       })
     } catch (err) {
-      console.error("UPDATE STATUS ERROR:", err)
-
       toast.add({
         title: "Update failed",
-        description:
-          err instanceof Error ? err.message : "Something went wrong.",
+        description: getApplicationsErrorMessage(
+          err,
+          "Something went wrong while updating the application status."
+        ),
         type: "error",
       })
     } finally {
@@ -543,7 +494,10 @@ export default function JobApplicantsPage() {
                       value={application.status || "Applied"}
                       disabled={isProcessing}
                       onChange={(event) =>
-                        void updateStatus(application.id, event.target.value)
+                        void updateStatus(
+                          application.id,
+                          event.target.value as ApplicationStatus
+                        )
                       }
                       className="w-full rounded-lg border border-white/10 bg-[#111116] px-3 py-2.5 text-xs text-[#d4d4d8] outline-none focus:border-[#5c53fe] disabled:opacity-50"
                     >

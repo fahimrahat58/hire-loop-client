@@ -7,7 +7,9 @@
  * backend endpoint yet (applications, billing, users, companies, payments...).
  */
 
-export type Role = "seeker" | "recruiter" | "admin"
+import type { DashboardRole } from "./roles"
+
+export type Role = DashboardRole
 
 export type ApplicationStatus =
   | "Applied"

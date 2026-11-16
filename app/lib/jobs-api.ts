@@ -1,5 +1,6 @@
 
 import { authClient } from "@/app/lib/auth-client"
+import { getHttpErrorMessage } from "@/app/lib/api-errors"
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -58,7 +59,6 @@ export type JobUser = {
 }
 
 export type JobRequestOptions = {
-  user?: JobUser | null
   cookie?: string
   signal?: AbortSignal
 }
@@ -108,7 +108,9 @@ export function getJobsErrorMessage(
   error: unknown,
   fallback = "Something went wrong while contacting the jobs service."
 ): string {
-  if (error instanceof JobsApiError) return error.message
+  if (error instanceof JobsApiError) {
+    return getHttpErrorMessage(error.status, fallback, error.message)
+  }
 
   if (error instanceof Error && error.message) {
     return error.message
@@ -160,21 +162,8 @@ async function buildHeaders(
     }
   }
 
-  // User context headers
-  // Backend must verify JWT independently.
-  if (options.user) {
-    if (options.user.id) {
-      headers.set("x-user-id", options.user.id)
-    }
-
-    if (options.user.email) {
-      headers.set("x-user-email", options.user.email)
-    }
-
-    if (options.user.role) {
-      headers.set("x-user-role", options.user.role)
-    }
-  }
+  // Authorization is carried only by the verified Bearer token above. User
+  // identity is never sent in custom headers and never trusted by the API.
 
   // Cookie forwarding for server-side requests
   if (options.cookie) {

@@ -33,6 +33,11 @@ interface ProfileSettingsProps {
   pageTitle?: string
   description?: string
   roleLabel: string
+  /**
+   * The Profile page reuses this component but only shows account details.
+   * Settings keeps the password form.
+   */
+  showSecurity?: boolean
 }
 
 function isValidImageUrl(value: string) {
@@ -50,6 +55,7 @@ export function ProfileSettings({
   pageTitle = "Settings",
   description = "Manage the account information supported by HireLoop.",
   roleLabel,
+  showSecurity = true,
 }: ProfileSettingsProps) {
   const router = useRouter()
 
@@ -216,15 +222,16 @@ export function ProfileSettings({
         <div>
           <p className="font-medium">Only supported account fields are shown</p>
           <p className="mt-0.5 text-[12px] text-[#a79fff]">
-            Name, profile image, and password are handled by Better Auth. The
-            backend does not store headline, bio, skills, resume, notification
-            preferences, or job preferences, so those fields are not presented
-            as working settings.
+            {showSecurity
+              ? "Name, profile image, and password are handled by Better Auth. The backend does not store headline, bio, skills, resume, notification preferences, or job preferences, so those fields are not presented as working settings."
+              : "Name and profile image are handled by Better Auth. The backend does not store headline, bio, skills, resume, notification preferences, or job preferences, so those fields are not presented as working settings."}
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div
+        className={cn("grid gap-4", showSecurity && "lg:grid-cols-2")}
+      >
         <SectionCard
           title="Profile information"
           description="This is how you appear across HireLoop."
@@ -309,77 +316,79 @@ export function ProfileSettings({
           </button>
         </SectionCard>
 
-        <SectionCard
-          title="Password"
-          description="Change the password used to sign in."
-          bodyClassName="p-5"
-        >
-          <div className="space-y-4">
-            <div>
-              <FieldLabel htmlFor="current-password">
-                Current password
-              </FieldLabel>
-
-              <input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Enter your current password"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <FieldLabel htmlFor="new-password">New password</FieldLabel>
-
-              <input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                placeholder="At least 8 characters"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <FieldLabel htmlFor="confirm-password">
-                Confirm new password
-              </FieldLabel>
-
-              <input
-                id="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                placeholder="Repeat your new password"
-                className={inputClass}
-              />
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => void handleChangePassword()}
-            disabled={changingPassword}
-            className={cn(primaryButton, "mt-5")}
+        {showSecurity && (
+          <SectionCard
+            title="Password"
+            description="Change the password used to sign in."
+            bodyClassName="p-5"
           >
-            {changingPassword ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              <KeyRound className="size-3.5" />
-            )}
-            {changingPassword ? "Changing..." : "Change password"}
-          </button>
+            <div className="space-y-4">
+              <div>
+                <FieldLabel htmlFor="current-password">
+                  Current password
+                </FieldLabel>
 
-          <p className="mt-3 text-[11px] leading-relaxed text-[#6e6e78]">
-            Changing your password also revokes other active sessions.
-          </p>
-        </SectionCard>
+                <input
+                  id="current-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  placeholder="Enter your current password"
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <FieldLabel htmlFor="new-password">New password</FieldLabel>
+
+                <input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  placeholder="At least 8 characters"
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <FieldLabel htmlFor="confirm-password">
+                  Confirm new password
+                </FieldLabel>
+
+                <input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Repeat your new password"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void handleChangePassword()}
+              disabled={changingPassword}
+              className={cn(primaryButton, "mt-5")}
+            >
+              {changingPassword ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <KeyRound className="size-3.5" />
+              )}
+              {changingPassword ? "Changing..." : "Change password"}
+            </button>
+
+            <p className="mt-3 text-[11px] leading-relaxed text-[#6e6e78]">
+              Changing your password also revokes other active sessions.
+            </p>
+          </SectionCard>
+        )}
       </div>
 
       <SectionCard

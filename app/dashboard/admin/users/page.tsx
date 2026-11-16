@@ -45,16 +45,20 @@ import { cn } from "@/lib/utils"
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
-const ROLE_LABELS: Record<AdminUserRole, string> = {
+type DisplayRole = AdminUserRole | "unknown"
+
+const ROLE_LABELS: Record<DisplayRole, string> = {
   seeker: "Seeker",
   recruiter: "Recruiter",
   admin: "Admin",
+  unknown: "Unknown",
 }
 
-const ROLE_BADGE_STYLES: Record<AdminUserRole, string> = {
+const ROLE_BADGE_STYLES: Record<DisplayRole, string> = {
   seeker: "border-[#60a5fa]/30 bg-[#60a5fa]/14 text-[#93c5fd]",
   recruiter: "border-[#5c53fe]/30 bg-[#5c53fe]/16 text-[#b8b2ff]",
   admin: "border-[#22c55e]/30 bg-[#22c55e]/14 text-[#86efac]",
+  unknown: "border-white/15 bg-white/[0.06] text-[#a0a0ab]",
 }
 
 const ROLE_OPTIONS: AdminUserRole[] = ["seeker", "recruiter", "admin"]
@@ -80,7 +84,7 @@ function formatDate(value?: string | null) {
   })
 }
 
-function RoleBadge({ role }: { role: AdminUserRole }) {
+function RoleBadge({ role }: { role: DisplayRole }) {
   return (
     <span
       className={cn(
@@ -181,7 +185,10 @@ export default function AdminUsersPage() {
         setCounts(result.counts)
         setDraftRoles(
           Object.fromEntries(
-            result.users.map((user) => [user.id, user.role])
+            result.users.map((user) => [
+              user.id,
+              user.role === "unknown" ? "seeker" : user.role,
+            ])
           ) as Record<string, AdminUserRole>
         )
       } catch (requestError) {
@@ -275,7 +282,8 @@ export default function AdminUsersPage() {
   )
 
   const handleRoleUpdate = async (user: AdminUser) => {
-    const nextRole = draftRoles[user.id] ?? user.role
+    const nextRole =
+      draftRoles[user.id] ?? (user.role === "unknown" ? "seeker" : user.role)
 
     if (user.id === sessionUserId) {
       toast.error("You cannot change your own admin role.")
@@ -310,7 +318,10 @@ export default function AdminUsersPage() {
         getAdminErrorMessage(updateError, "Failed to update the user role.")
       )
 
-      setDraftRoles((current) => ({ ...current, [user.id]: user.role }))
+      setDraftRoles((current) => ({
+        ...current,
+        [user.id]: user.role === "unknown" ? "seeker" : user.role,
+      }))
     } finally {
       setUpdatingId(null)
     }
@@ -488,7 +499,9 @@ export default function AdminUsersPage() {
             <tbody>
               {users.map((user) => {
                 const isSelf = user.id === sessionUserId
-                const draftRole = draftRoles[user.id] ?? user.role
+                const draftRole =
+                  draftRoles[user.id] ??
+                  (user.role === "unknown" ? "seeker" : user.role)
                 const isUpdating = updatingId === user.id
                 const hasChange = draftRole !== user.role
 

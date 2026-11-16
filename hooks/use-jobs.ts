@@ -37,7 +37,6 @@ export function useJobs() {
 
       try {
         const data = await getJobs({
-          user,
           signal: options?.signal,
         })
 
@@ -61,7 +60,7 @@ export function useJobs() {
         }
       }
     },
-    [user]
+    []
   )
 
   useEffect(() => {

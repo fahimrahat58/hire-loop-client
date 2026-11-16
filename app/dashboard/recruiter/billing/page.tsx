@@ -18,7 +18,6 @@ import { authClient } from "@/app/lib/auth-client"
 import {
   getBillingSummary,
   type BillingSummary,
-  type JobUser,
 } from "@/app/lib/jobs-api"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -45,13 +44,7 @@ export default function RecruiterBillingPage() {
     try {
       setLoading(true)
 
-      const user: JobUser = {
-        id: currentUser.id,
-        email: currentUser.email,
-        role: currentUser.role || "recruiter",
-      }
-
-      const result = await getBillingSummary({ user })
+      const result = await getBillingSummary()
       setBilling(result)
     } catch (error) {
       console.error("Billing fetch error:", error)
@@ -101,12 +94,6 @@ export default function RecruiterBillingPage() {
 
     let cancelled = false
 
-    const user: JobUser = {
-      id: currentUser.id,
-      email: currentUser.email,
-      role: currentUser.role || "recruiter",
-    }
-
     const confirmSubscription = async () => {
       if (billing?.plan === "premium") {
         setCheckoutNotice("success")
@@ -122,7 +109,7 @@ export default function RecruiterBillingPage() {
         if (cancelled) return
 
         try {
-          const data = await getBillingSummary({ user })
+          const data = await getBillingSummary()
 
           if (cancelled) return
 

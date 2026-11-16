@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation"
 import { Bell, ChevronRight, Menu, Search, Sparkles, X } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
-import { roleMeta, type Role } from "@/app/lib/dashboard-data"
+import { roleMeta } from "@/app/lib/dashboard-data"
+import { getDashboardRole, type DashboardRole } from "@/app/lib/roles"
 import { dashboardNav } from "./nav-config"
 import { Avatar } from "./ui"
 import { cn } from "@/lib/utils"
@@ -14,31 +15,17 @@ import { cn } from "@/lib/utils"
 function resolveRole(
   pathname: string | null,
   sessionRole?: string | null
-): Role {
+): DashboardRole {
   if (pathname?.startsWith("/dashboard/seeker")) return "seeker"
   if (pathname?.startsWith("/dashboard/recruiter")) return "recruiter"
   if (pathname?.startsWith("/dashboard/admin")) return "admin"
 
-  if (pathname?.startsWith("/dashboard/jobs")) {
-    if (
-      sessionRole === "seeker" ||
-      sessionRole === "recruiter" ||
-      sessionRole === "admin"
-    ) {
-      return sessionRole
-    }
-
-    return "seeker"
-  }
-
-  if (sessionRole === "recruiter" || sessionRole === "admin") {
-    return sessionRole
-  }
-
-  return "seeker"
+  // The session role is only used to pick the shell appearance. Route access
+  // itself is enforced by SessionGuard, which rejects invalid roles.
+  return getDashboardRole(sessionRole) ?? "seeker"
 }
 
-const roleSwitch: { role: Role; label: string }[] = [
+const roleSwitch: { role: DashboardRole; label: string }[] = [
   { role: "seeker", label: "Seeker" },
   { role: "recruiter", label: "Recruiter" },
   { role: "admin", label: "Admin" },
@@ -239,7 +226,7 @@ function SidebarContent({
   image,
   onNavigate,
 }: {
-  role: Role
+  role: DashboardRole
   pathname: string | null
   name: string
   email: string

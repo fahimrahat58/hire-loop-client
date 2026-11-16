@@ -29,24 +29,13 @@ import {
 import { useJobs } from "@/hooks/use-jobs"
 import { filterManageableJobs } from "@/app/lib/job-ownership"
 import { getJobStatus } from "@/app/lib/jobs-api"
+import {
+  getApplicationsErrorMessage,
+  getRecruiterApplications,
+  type RecruiterApplication,
+} from "@/app/lib/applications-api"
 
-type ApplicationStatus =
-  "Applied" | "Under Review" | "Shortlisted" | "Offered" | "Rejected"
-
-type Application = {
-  id: string
-  jobId: string
-  name: string
-  email: string
-  role: string
-  applied: string
-  experience: string
-  resumeUrl: string
-  coverLetter: string
-  status: ApplicationStatus
-}
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+type Application = RecruiterApplication
 
 const statIcons = [BriefcaseBusiness, Users, CheckCircle2, XCircle]
 
@@ -73,7 +62,7 @@ export default function RecruiterDashboardPage() {
 
   // Fetch real applications from MongoDB
   const fetchApplications = useCallback(async () => {
-    if (!recruiterEmail || !API_URL) {
+    if (!recruiterEmail) {
       setApplications([])
       setApplicationsLoading(false)
       return
@@ -83,38 +72,15 @@ export default function RecruiterDashboardPage() {
       setApplicationsLoading(true)
       setApplicationsError("")
 
-      // Get Better Auth JWT token
-      const { data, error } = await authClient.token()
+      const data = await getRecruiterApplications()
 
-      if (error || !data?.token) {
-        throw new Error("Authentication token not found. Please sign in again.")
-      }
-
-      // Fetch recruiter applications
-      const response = await fetch(`${API_URL}/api/applications/recruiter`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${data.token}`,
-        },
-        credentials: "include",
-        cache: "no-store",
-      })
-
-      const result = await response.json()
-
-      console.log("RECRUITER DASHBOARD APPLICATIONS:", result)
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to load applications")
-      }
-
-      setApplications(Array.isArray(result.data) ? result.data : [])
+      setApplications(data)
     } catch (error) {
-      console.error("RECRUITER APPLICATIONS ERROR:", error)
-
       setApplicationsError(
-        error instanceof Error ? error.message : "Something went wrong"
+        getApplicationsErrorMessage(
+          error,
+          "Something went wrong while loading applications."
+        )
       )
     } finally {
       setApplicationsLoading(false)

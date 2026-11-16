@@ -40,12 +40,9 @@ export default function JobDetailsPage() {
   const role = session?.user?.role
   const isSeeker = role === "seeker"
 
-  const userId = session?.user?.id
-  const userEmail = session?.user?.email
-
   const backHref =
     role === "admin"
-      ? "/dashboard/admin/jobs"
+      ? "/dashboard/admin"
       : role === "recruiter"
         ? "/dashboard/recruiter/jobs"
         : "/dashboard/seeker/jobs"
@@ -62,13 +59,6 @@ export default function JobDetailsPage() {
     setLoading(true)
 
     getJob(params.jobId, {
-      user: userId
-        ? {
-            id: userId,
-            email: userEmail,
-            role,
-          }
-        : null,
       signal: controller.signal,
     })
       .then(setJob)
@@ -82,7 +72,7 @@ export default function JobDetailsPage() {
       })
 
     return () => controller.abort()
-  }, [params.jobId, userId, userEmail, role])
+  }, [params.jobId])
 
   if (loading) {
     return (

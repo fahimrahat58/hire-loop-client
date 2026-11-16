@@ -219,11 +219,6 @@ export default function RecruiterNewJobPage() {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
-            ...(currentUser?.id ? { "x-user-id": currentUser.id } : {}),
-            ...(currentUser?.email
-              ? { "x-user-email": currentUser.email }
-              : {}),
-            ...(currentUser?.role ? { "x-user-role": currentUser.role } : {}),
           },
           credentials: "include",
           body: JSON.stringify({
@@ -279,9 +274,7 @@ export default function RecruiterNewJobPage() {
     setPageError(null)
 
     try {
-      const job = await getJob(editId, {
-        user: currentUser,
-      })
+      const job = await getJob(editId)
 
       const role = currentUser.role?.toLowerCase()
 
@@ -553,9 +546,7 @@ export default function RecruiterNewJobPage() {
       throw new Error("Please sign in before publishing a job.")
     }
 
-    const billing = await getBillingSummary({
-      user: currentUser,
-    })
+    const billing = await getBillingSummary()
 
     const isPremium = billing.plan === "premium"
 
@@ -631,9 +622,7 @@ export default function RecruiterNewJobPage() {
       const payload = buildPayload(status)
 
       if (editId) {
-        await updateJob(editId, payload, {
-          user: currentUser,
-        })
+        await updateJob(editId, payload)
 
         toast.add({
           title:
@@ -664,9 +653,7 @@ export default function RecruiterNewJobPage() {
         // If a draft was published, check whether it used the final slot.
         if (isNewPublication) {
           try {
-            const billing = await getBillingSummary({
-              user: currentUser,
-            })
+            const billing = await getBillingSummary()
 
             if (
               billing.plan !== "premium" &&
@@ -679,9 +666,7 @@ export default function RecruiterNewJobPage() {
           }
         }
       } else {
-        const createdJob = await createJob(payload, {
-          user: currentUser,
-        })
+        const createdJob = await createJob(payload)
 
         rememberJobOwner(createdJob, currentUser)
 
@@ -704,9 +689,7 @@ export default function RecruiterNewJobPage() {
         // Check usage after successful publication.
         if (status === "active") {
           try {
-            const billing = await getBillingSummary({
-              user: currentUser,
-            })
+            const billing = await getBillingSummary()
 
             if (
               billing.plan !== "premium" &&

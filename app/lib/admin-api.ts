@@ -1,4 +1,6 @@
 import { authClient } from "@/app/lib/auth-client"
+import { getHttpErrorMessage } from "@/app/lib/api-errors"
+import type { DashboardRole } from "@/app/lib/roles"
 
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
@@ -8,7 +10,7 @@ const API_URL = (
 // TYPES
 // ====================================
 
-export type AdminUserRole = "seeker" | "recruiter" | "admin"
+export type AdminUserRole = DashboardRole
 
 export type AdminUserRoleFilter = AdminUserRole | "all"
 
@@ -16,7 +18,7 @@ export type AdminUser = {
   id: string
   name: string
   email: string
-  role: AdminUserRole
+  role: AdminUserRole | "unknown"
   emailVerified: boolean
   image: string | null
   createdAt: string | null
@@ -69,7 +71,7 @@ export function getAdminErrorMessage(
   fallback = "Something went wrong while contacting the admin service."
 ) {
   if (error instanceof AdminApiError) {
-    return error.message
+    return getHttpErrorMessage(error.status, fallback, error.message)
   }
 
   if (error instanceof Error && error.message) {

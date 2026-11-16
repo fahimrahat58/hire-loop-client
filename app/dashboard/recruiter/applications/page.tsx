@@ -14,6 +14,14 @@ import {
 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
+import {
+  APPLICATION_STATUSES,
+  getApplicationsErrorMessage,
+  getRecruiterApplications,
+  updateRecruiterApplicationStatus,
+  type ApplicationStatus,
+  type RecruiterApplication,
+} from "@/app/lib/applications-api"
 
 import {
   Avatar,
@@ -31,33 +39,11 @@ import {
 
 import { cn } from "@/lib/utils"
 
-type ApplicationStatus =
-  "Applied" | "Under Review" | "Shortlisted" | "Offered" | "Rejected"
+type Application = RecruiterApplication
 
-type Application = {
-  id: string
-  jobId: string
-  name: string
-  email: string
-  role: string
-  applied: string
-  experience: string
-  resumeUrl: string
-  coverLetter: string
-  status: ApplicationStatus
-}
-
-const statuses: ApplicationStatus[] = [
-  "Applied",
-  "Under Review",
-  "Shortlisted",
-  "Offered",
-  "Rejected",
-]
+const statuses: ApplicationStatus[] = [...APPLICATION_STATUSES]
 
 const filters = ["All", ...statuses] as const
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function RecruiterApplicationsPage() {
   const { data: session, isPending: sessionLoading } = authClient.useSession()
@@ -76,41 +62,27 @@ export default function RecruiterApplicationsPage() {
   // FETCH APPLICATIONS
   // ------------------------------------
 
-  const fetchApplications = useCallback(async () => {
-    if (!recruiterEmail || !API_URL) return
-
+  const fetchApplications = useCallback(async (signal?: AbortSignal) => {
     try {
       setLoading(true)
       setError("")
 
-      const response = await fetch(`${API_URL}/api/applications/recruiter`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-email": recruiterEmail,
-        },
-        cache: "no-store",
-      })
+      const data = await getRecruiterApplications(signal)
 
-      const result = await response.json()
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to fetch applications")
-      }
-
-      setRows(result.data || [])
+      setRows(data)
     } catch (err) {
-      console.error("FETCH APPLICATIONS ERROR:", err)
+      if (err instanceof DOMException && err.name === "AbortError") return
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while loading applications"
+        getApplicationsErrorMessage(
+          err,
+          "Something went wrong while loading applications"
+        )
       )
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
-  }, [recruiterEmail])
+  }, [])
 
   useEffect(() => {
     if (sessionLoading) return
@@ -121,7 +93,11 @@ export default function RecruiterApplicationsPage() {
       return
     }
 
-    fetchApplications()
+    const controller = new AbortController()
+
+    void fetchApplications(controller.signal)
+
+    return () => controller.abort()
   }, [sessionLoading, recruiterEmail, fetchApplications])
 
   // ------------------------------------
@@ -129,7 +105,7 @@ export default function RecruiterApplicationsPage() {
   // ------------------------------------
 
   const changeStatus = async (id: string, status: ApplicationStatus) => {
-    if (!API_URL || !recruiterEmail) return
+    if (!recruiterEmail) return
 
     const previousRows = rows
 
@@ -143,29 +119,15 @@ export default function RecruiterApplicationsPage() {
         )
       )
 
-      const response = await fetch(`${API_URL}/api/applications/${id}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-email": recruiterEmail,
-        },
-        body: JSON.stringify({ status }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || "Failed to update application status")
-      }
+      await updateRecruiterApplicationStatus(id, status)
     } catch (err) {
-      console.error("UPDATE STATUS ERROR:", err)
-
       setRows(previousRows)
 
       setError(
-        err instanceof Error
-          ? err.message
-          : "Failed to update application status"
+        getApplicationsErrorMessage(
+          err,
+          "Failed to update application status"
+        )
       )
     } finally {
       setUpdatingId(null)
@@ -389,7 +351,7 @@ export default function RecruiterApplicationsPage() {
 
           <button
             type="button"
-            onClick={fetchApplications}
+            onClick={() => void fetchApplications()}
             className="flex items-center gap-2 text-xs font-medium text-[#c7c2ff]"
           >
             <RefreshCw className="size-3.5" />
