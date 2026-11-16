@@ -18,7 +18,7 @@ export default function RootLayout({
       <body className="relative min-h-screen overflow-x-hidden bg-[#141414] font-sans text-white">
         <SiteChrome>
           {children}
-          <Toaster position="top-right" richColors />
+          <Toaster position="top-center" richColors />
         </SiteChrome>
       </body>
     </html>

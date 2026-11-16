@@ -2,6 +2,8 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { UserRound } from "lucide-react"
+
 import { authClient } from "@/app/lib/auth-client"
 
 export function Navbar() {
@@ -51,13 +53,8 @@ export function Navbar() {
                   className="size-8 rounded-full border border-white/10 object-cover"
                 />
               ) : (
-                <span className="inline-flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-[#5c53fe] to-[#8f88ff] text-[11px] font-semibold text-white ring-2 ring-white/10">
-                  {(session.user.name || "U")
-                    .split(" ")
-                    .filter(Boolean)
-                    .slice(0, 2)
-                    .map((part) => part[0]?.toUpperCase())
-                    .join("") || "U"}
+                <span className="inline-flex size-8 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-gray-300">
+                  <UserRound className="size-4" />
                 </span>
               )}
               <span className="hidden font-semibold text-white sm:block">

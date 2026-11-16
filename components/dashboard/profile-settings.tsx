@@ -18,7 +18,6 @@ import {
 import { toast } from "sonner"
 
 import { authClient } from "@/app/lib/auth-client"
-import { bearerHeaders, getAuthToken } from "@/app/lib/auth-token"
 import {
   Avatar,
   DashboardCard,
@@ -44,10 +43,6 @@ interface ProfileSettingsProps {
   showSecurity?: boolean
 }
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-).replace(/\/+$/, "")
-
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
@@ -55,25 +50,56 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
 ])
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
+type ImgbbUploadResponse = {
+  success?: boolean
+  data?: {
+    url?: string
+    display_url?: string
+  }
+  error?: {
+    message?: string
+  }
+}
 
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result)
-        return
-      }
+async function uploadToImgbb(file: File): Promise<string> {
+  const apiKey = process.env.NEXT_PUBLIC_IMGBB_API_KEY
 
-      reject(new Error("Failed to read the selected image."))
-    }
+  if (!apiKey) {
+    throw new Error(
+      "Image upload is not configured. Please set NEXT_PUBLIC_IMGBB_API_KEY."
+    )
+  }
 
-    reader.onerror = () => {
-      reject(new Error("Failed to read the selected image."))
-    }
+  const formData = new FormData()
+  formData.append("key", apiKey)
+  formData.append("image", file)
 
-    reader.readAsDataURL(file)
+  const response = await fetch("https://api.imgbb.com/1/upload", {
+    method: "POST",
+    body: formData,
   })
+
+  let payload: ImgbbUploadResponse | null = null
+
+  try {
+    payload = (await response.json()) as ImgbbUploadResponse
+  } catch {
+    payload = null
+  }
+
+  if (!response.ok || !payload?.success) {
+    throw new Error(
+      payload?.error?.message || "Failed to upload profile image to ImgBB."
+    )
+  }
+
+  const imageUrl = payload.data?.display_url || payload.data?.url
+
+  if (!imageUrl) {
+    throw new Error("ImgBB did not return an image URL.")
+  }
+
+  return imageUrl
 }
 
 export function ProfileSettings({
@@ -162,38 +188,19 @@ export function ProfileSettings({
     setUploadingImage(true)
 
     try {
-      const token = await getAuthToken()
-      const imageData = await readFileAsDataUrl(selectedFile)
+      const imageUrl = await uploadToImgbb(selectedFile)
 
-      const response = await fetch(`${API_URL}/api/users/me/profile-image`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...bearerHeaders(token),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          image: imageData,
-          mimeType: selectedFile.type,
-        }),
+      const result = await authClient.updateUser({
+        image: imageUrl,
       })
 
-      const body = (await response.json().catch(() => null)) as
-        | { success?: boolean; message?: string; data?: { image?: string } }
-        | null
-
-      if (!response.ok || body?.success === false) {
+      if (result.error) {
         throw new Error(
-          body?.message || "Failed to upload the profile image."
+          result.error.message || "Failed to save the profile image."
         )
       }
 
-      const uploadedImage = body?.data?.image
-
-      if (uploadedImage) {
-        setSavedImage(uploadedImage)
-      }
-
+      setSavedImage(imageUrl)
       clearSelectedImage()
       await refetch()
       router.refresh()
@@ -379,8 +386,8 @@ export function ProfileSettings({
           <p className="font-medium">Only supported account fields are shown</p>
           <p className="mt-0.5 text-[12px] text-[#a79fff]">
             {showSecurity
-              ? "Name, profile image, and password are handled by supported account flows. Profile images are uploaded securely to ImgBB through the backend and saved to your user record."
-              : "Name and profile image are handled by supported account flows. Profile images are uploaded securely to ImgBB through the backend and saved to your user record."}
+              ? "Name, profile image, and password are handled by supported account flows. Profile images are uploaded to ImgBB from the frontend and the returned URL is saved to your user profile."
+              : "Name and profile image are handled by supported account flows. Profile images are uploaded to ImgBB from the frontend and the returned URL is saved to your user profile."}
           </p>
         </div>
       </div>
