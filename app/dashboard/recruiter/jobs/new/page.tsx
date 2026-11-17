@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeft,
   BriefcaseBusiness,
@@ -26,7 +27,7 @@ import {
   type JobInput,
 } from "@/app/lib/jobs-api"
 
-import { rememberJobOwner } from "@/app/lib/job-ownership"
+import { rememberJobOwner } from "@/app/lib/job-owner"
 
 import {
   DashboardCard,
@@ -36,12 +37,27 @@ import {
   inputClass,
   primaryButton,
   secondaryButton,
-} from "@/components/dashboard/ui"
+} from "@/app/components/dashboard"
 
-import { toast } from "@/components/ui/toast"
-import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { cn } from "@/app/lib/utils"
 
-const initialForm = {
+type ResultType = "published" | "draft" | "updated" | null
+
+type FormState = {
+  title: string
+  company: string
+  category: string
+  salaryMin: string
+  salaryMax: string
+  currency: string
+  location: string
+  responsibilities: string
+  requirements: string
+  benefits: string
+}
+
+const initialForm: FormState = {
   title: "",
   company: "",
   category: "Design",
@@ -54,176 +70,389 @@ const initialForm = {
   benefits: "",
 }
 
-type FormData = typeof initialForm
-
-type ResultType = "published" | "draft" | "updated" | null
-
-type UpgradeDialogProps = {
-  open: boolean
-  upgrading: boolean
-  onUpgrade: () => void
-  onClose: () => void
-}
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "")
 
 function UpgradeDialog({
   open,
+  onClose,
   upgrading,
   onUpgrade,
-  onClose,
-}: UpgradeDialogProps) {
+}: {
+  open: boolean
+  onClose: () => void
+  upgrading: boolean
+  onUpgrade: () => void
+}) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="upgrade-dialog-title"
-        className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#18181d] p-6 shadow-2xl"
-      >
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#151515] p-6 shadow-2xl">
         <button
           type="button"
           onClick={onClose}
-          disabled={upgrading}
-          aria-label="Close dialog"
-          className="absolute top-4 right-4 rounded-lg p-2 text-[#8b8b96] transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+          className="absolute top-4 right-4 rounded-lg p-2 text-white/50 transition hover:bg-white/5 hover:text-white"
+          aria-label="Close"
         >
-          <X className="size-4" />
+          <X className="h-5 w-5" />
         </button>
 
-        <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-[#5c53fe]/15">
-          <Sparkles className="size-7 text-[#a9a3ff]" />
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-[#ccff00]/10">
+          <Sparkles className="h-6 w-6 text-[#ccff00]" />
         </div>
 
-        <h2
-          id="upgrade-dialog-title"
-          className="mt-5 text-center text-xl font-semibold text-white"
-        >
+        <h2 className="text-xl font-semibold text-white">
           Free Plan Limit Reached
         </h2>
 
-        <p className="mt-3 text-center text-sm leading-6 text-[#a0a0ab]">
-          You have reached your limit of 5 active job posts. Upgrade to Premium
-          to publish unlimited jobs on HireLoop.
+        <p className="mt-2 text-sm leading-6 text-white/60">
+          You have reached the maximum of 5 active jobs on the free plan.
+          Upgrade to Premium to publish more jobs.
         </p>
 
-        <div className="mt-6 space-y-3">
-          <button
-            type="button"
-            onClick={onUpgrade}
-            disabled={upgrading}
-            className={cn(primaryButton, "w-full justify-center")}
-          >
-            {upgrading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
+        <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-white/60">Free Plan</span>
+            <span className="text-sm font-medium text-white">5 jobs</span>
+          </div>
 
-            {upgrading ? "Redirecting to Stripe..." : "Upgrade to Premium"}
-          </button>
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-sm text-white/60">Premium</span>
+            <span className="text-sm font-medium text-[#ccff00]">
+              More job postings
+            </span>
+          </div>
+        </div>
 
+        <div className="mt-6 flex gap-3">
           <button
             type="button"
             onClick={onClose}
             disabled={upgrading}
-            className={cn(secondaryButton, "w-full justify-center")}
+            className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Maybe Later
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onUpgrade}
+            disabled={upgrading}
+            className="flex-1 rounded-xl bg-[#ccff00] px-4 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {upgrading ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Redirecting...
+              </span>
+            ) : (
+              "Upgrade to Premium"
+            )}
           </button>
         </div>
-
-        <p className="mt-4 text-center text-[10px] text-[#6e6e78]">
-          Secure payment powered by Stripe.
-        </p>
       </div>
     </div>
   )
 }
 
 export default function RecruiterNewJobPage() {
-  const { data: session, isPending: sessionPending } = authClient.useSession()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  const user = session?.user
+  const editId = searchParams.get("edit")
 
-  const currentUser: JobUser | null = user
-    ? {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      }
-    : null
+  const [session, setSession] = useState<any>(null)
+  const [sessionLoading, setSessionLoading] = useState(true)
 
-  const [form, setForm] = useState<FormData>(initialForm)
-
+  const [form, setForm] = useState<FormState>(initialForm)
   const [remote, setRemote] = useState(false)
 
   const [result, setResult] = useState<ResultType>(null)
 
-  const [editId, setEditId] = useState<string | null>(null)
-
-  const [editModeReady, setEditModeReady] = useState(false)
-
+  const [editModeReady, setEditModeReady] = useState(!editId)
   const [jobLoaded, setJobLoaded] = useState(false)
-
-  const [loadingJob, setLoadingJob] = useState(false)
+  const [loadingJob, setLoadingJob] = useState(Boolean(editId))
 
   const [submitting, setSubmitting] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
 
-  const [pageError, setPageError] = useState<string | null>(null)
-
+  const [pageError, setPageError] = useState("")
   const [jobStatus, setJobStatus] = useState<"active" | "draft">("active")
 
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
 
-  const [upgrading, setUpgrading] = useState(false)
+  const activeRequestRef = useRef<AbortController | null>(null)
 
-  const activeRequestRef = useRef<string | null>(null)
-
-  // ==========================================
-  // DETECT EDIT MODE
-  // ==========================================
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const id = params.get("edit")
-
-    setEditId(id)
-    setEditModeReady(true)
-  }, [])
-
-  // ==========================================
-  // FORM UPDATE
-  // ==========================================
-
-  const update = (field: keyof FormData, value: string) => {
-    setForm((current) => ({
-      ...current,
-      [field]: value,
-    }))
+  const currentUser: JobUser = {
+    id: session?.user?.id ?? session?.user?._id ?? null,
+    email: session?.user?.email ?? null,
+    role: session?.user?.role ?? session?.user?.userType ?? null,
   }
 
-  // ==========================================
-  // STRIPE CHECKOUT
-  // ==========================================
-
-  const handleUpgrade = async () => {
-    if (upgrading) return
-
-    setUpgrading(true)
-
+  const loadSession = useCallback(async () => {
     try {
-      const tokenResult = await authClient.token()
+      setSessionLoading(true)
 
-      const token = tokenResult.data?.token
+      const { data, error } = await authClient.getSession()
 
-      if (!token) {
-        throw new Error("Your session has expired. Please sign in again.")
+      if (error) {
+        throw new Error(error.message || "Unable to load session.")
       }
 
-      const API_URL = (
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-      ).replace(/\/+$/, "")
+      setSession(data?.session ? data : null)
+    } catch (error) {
+      console.error("Session loading error:", error)
+      setSession(null)
+    } finally {
+      setSessionLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadSession()
+  }, [loadSession])
+
+  const loadExistingJob = useCallback(async () => {
+    if (!editId) {
+      setEditModeReady(true)
+      setLoadingJob(false)
+      return
+    }
+
+    if (sessionLoading) return
+
+    if (!currentUser.id && !currentUser.email) {
+      setPageError("You must be logged in to edit a job.")
+      setLoadingJob(false)
+      setEditModeReady(true)
+      return
+    }
+
+    try {
+      setLoadingJob(true)
+      setPageError("")
+
+      const job = await getJob(editId)
+
+      const userRole = String(currentUser.role || "").toLowerCase()
+
+      if (userRole && userRole !== "recruiter" && userRole !== "admin") {
+        throw new Error("Only recruiters can edit jobs.")
+      }
+
+      const jobOwnerId =
+        job.recruiterId || job.createdBy || job.ownerId || job.userId
+
+      const jobOwnerEmail = job.ownerEmail
+
+      const isAdmin = userRole === "admin"
+
+      const ownsJob =
+        isAdmin ||
+        (currentUser.id &&
+          jobOwnerId &&
+          String(currentUser.id) === String(jobOwnerId)) ||
+        (currentUser.email &&
+          jobOwnerEmail &&
+          currentUser.email.toLowerCase() ===
+            String(jobOwnerEmail).toLowerCase())
+
+      if (!ownsJob) {
+        throw new Error("You are not allowed to edit this job.")
+      }
+
+      rememberJobOwner(editId, {
+        id: jobOwnerId ? String(jobOwnerId) : currentUser.id || undefined,
+        email: jobOwnerEmail || currentUser.email || undefined,
+      })
+
+      const status =
+        String(job.status || "").toLowerCase() === "draft" ? "draft" : "active"
+
+      setJobStatus(status)
+
+      const description = String(job.description || "")
+
+      const getSection = (name: string) => {
+        const regex = new RegExp(
+          `${name}:\\s*([\\s\\S]*?)(?=\\n\\n[A-Za-z ]+:|$)`,
+          "i"
+        )
+
+        const match = description.match(regex)
+
+        return match?.[1]?.trim() || ""
+      }
+
+      const salary = String(job.salary || "")
+
+      let salaryMin = ""
+      let salaryMax = ""
+
+      const salaryNumbers = salary.match(/\d+(?:\.\d+)?/g)
+
+      if (salaryNumbers?.length) {
+        salaryMin = salaryNumbers[0] || ""
+        salaryMax = salaryNumbers[1] || ""
+      }
+
+      const jobLocation = String(job.location || "")
+
+      const isRemote =
+        jobLocation.toLowerCase() === "remote" ||
+        jobLocation.toLowerCase().includes("remote")
+
+      setRemote(isRemote)
+
+      setForm({
+        title: String(job.title || ""),
+        company: String(job.company || ""),
+        category: String(job.category || "Design"),
+        salaryMin,
+        salaryMax,
+        currency: String(job.currency || "USD"),
+        location: isRemote ? "" : jobLocation,
+        responsibilities: getSection("Responsibilities"),
+        requirements: getSection("Requirements"),
+        benefits: getSection("Benefits"),
+      })
+
+      setJobLoaded(true)
+      setEditModeReady(true)
+    } catch (error) {
+      console.error("Load job error:", error)
+
+      setPageError(
+        getJobsErrorMessage(error, "Unable to load this job. Please try again.")
+      )
+
+      setEditModeReady(true)
+    } finally {
+      setLoadingJob(false)
+    }
+  }, [
+    editId,
+    sessionLoading,
+    currentUser.id,
+    currentUser.email,
+    currentUser.role,
+  ])
+
+  useEffect(() => {
+    loadExistingJob()
+  }, [loadExistingJob])
+
+  const handleChange = (field: keyof FormState, value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }))
+
+    setPageError("")
+  }
+
+  const validateForm = () => {
+    if (!form.title.trim()) {
+      return "Please enter a job title."
+    }
+
+    if (!form.company.trim()) {
+      return "Please enter the company name."
+    }
+
+    if (!remote && !form.location.trim()) {
+      return "Please enter a location or enable Remote."
+    }
+
+    if (form.salaryMin.trim() && Number.isNaN(Number(form.salaryMin))) {
+      return "Minimum salary must be a valid number."
+    }
+
+    if (form.salaryMax.trim() && Number.isNaN(Number(form.salaryMax))) {
+      return "Maximum salary must be a valid number."
+    }
+
+    if (
+      form.salaryMin.trim() &&
+      form.salaryMax.trim() &&
+      Number(form.salaryMax) < Number(form.salaryMin)
+    ) {
+      return "Maximum salary cannot be lower than minimum salary."
+    }
+
+    return null
+  }
+
+  const buildSalary = () => {
+    const min = form.salaryMin.trim()
+    const max = form.salaryMax.trim()
+
+    if (!min && !max) {
+      return ""
+    }
+
+    const symbolMap: Record<string, string> = {
+      USD: "$",
+      BDT: "৳",
+      EUR: "€",
+      GBP: "£",
+    }
+
+    const symbol = symbolMap[form.currency] || form.currency
+
+    if (min && max) {
+      return `${symbol}${min}k - ${symbol}${max}k`
+    }
+
+    if (min) {
+      return `${symbol}${min}k+`
+    }
+
+    return `Up to ${symbol}${max}k`
+  }
+
+  const buildDescription = () => {
+    const sections: string[] = []
+
+    if (form.responsibilities.trim()) {
+      sections.push(`Responsibilities:\n${form.responsibilities.trim()}`)
+    }
+
+    if (form.requirements.trim()) {
+      sections.push(`Requirements:\n${form.requirements.trim()}`)
+    }
+
+    if (form.benefits.trim()) {
+      sections.push(`Benefits:\n${form.benefits.trim()}`)
+    }
+
+    return sections.join("\n\n")
+  }
+
+  const buildPayload = (status: "active" | "draft"): JobInput => {
+    return {
+      title: form.title.trim(),
+      company: form.company.trim(),
+      category: form.category,
+      location: remote ? "Remote" : form.location.trim(),
+      salary: buildSalary(),
+      description: buildDescription(),
+      status,
+      closed: status === "draft",
+    }
+  }
+
+  const handleUpgrade = async () => {
+    try {
+      setUpgrading(true)
+
+      const { data, error } = await authClient.token()
+
+      if (error || !data?.token) {
+        throw new Error("Unable to authenticate your account.")
+      }
 
       const response = await fetch(
         `${API_URL}/api/billing/create-checkout-session`,
@@ -231,7 +460,7 @@ export default function RecruiterNewJobPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${data.token}`,
           },
           credentials: "include",
           body: JSON.stringify({
@@ -240,1087 +469,620 @@ export default function RecruiterNewJobPage() {
         }
       )
 
-      const body = await response.json()
+      const body = await response.json().catch(() => null)
 
       if (!response.ok) {
         throw new Error(
-          body.message || body.error || "Unable to start Stripe checkout."
+          body?.message || "Unable to create the checkout session."
         )
       }
 
-      const checkoutUrl = body.data?.url || body.url
-
-      if (!checkoutUrl) {
-        throw new Error("Stripe checkout URL was not returned.")
+      if (!body?.url) {
+        throw new Error("Checkout URL was not returned.")
       }
 
-      window.location.assign(checkoutUrl)
+      window.location.href = body.url
     } catch (error) {
-      console.error("UPGRADE ERROR:", error)
+      console.error("Upgrade error:", error)
 
-      toast.add({
-        title: "Upgrade failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Unable to start Stripe checkout.",
-        type: "error",
-      })
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Unable to start the upgrade process."
+      )
 
       setUpgrading(false)
     }
   }
 
-  // ==========================================
-  // LOAD EXISTING JOB
-  // ==========================================
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
 
-  const loadExistingJob = useCallback(async () => {
-    if (!editId || !currentUser) return
+    if (submitting) return
 
-    const requestKey = `${editId}-${currentUser.id}-${currentUser.email}`
+    setPageError("")
 
-    if (activeRequestRef.current === requestKey) {
+    const validationError = validateForm()
+
+    if (validationError) {
+      setPageError(validationError)
+      toast.error(validationError)
       return
     }
 
-    activeRequestRef.current = requestKey
-
-    setLoadingJob(true)
-    setJobLoaded(false)
-    setPageError(null)
-
-    try {
-      const job = await getJob(editId)
-
-      const role = currentUser.role?.toLowerCase()
-
-      if (role !== "admin" && role !== "recruiter") {
-        throw new Error("You cannot edit this job.")
-      }
-
-      // ========================================
-      // VERIFY OWNERSHIP
-      // ========================================
-
-      if (role === "recruiter") {
-        const owner =
-          job.recruiterId ||
-          job.createdBy ||
-          job.ownerId ||
-          job.userId ||
-          job.ownerEmail ||
-          ""
-
-        const ownerValue = String(owner).toLowerCase()
-
-        const userId = String(currentUser.id || "").toLowerCase()
-
-        const userEmail = String(currentUser.email || "").toLowerCase()
-
-        const ownsJob = ownerValue === userId || ownerValue === userEmail
-
-        if (!ownsJob) {
-          throw new Error("You can only edit your own job posts.")
-        }
-      }
-
-      // ========================================
-      // JOB STATUS
-      // ========================================
-
-      const existingStatus =
-        job.status?.toLowerCase() === "draft" ? "draft" : "active"
-
-      setJobStatus(existingStatus)
-
-      // ========================================
-      // SALARY
-      // ========================================
-
-      const salary = job.salary || ""
-
-      const salaryMatch = salary.match(
-        /(\d[\d,.]*)\s*([km])?\s*(?:-|to)\s*(\d[\d,.]*)\s*([km])?/i
-      )
-
-      const toAmount = (value: string, unit?: string) => {
-        const amount = Number(value.replaceAll(",", ""))
-
-        if (!Number.isFinite(amount)) {
-          return ""
-        }
-
-        const multiplier =
-          unit?.toLowerCase() === "k"
-            ? 1000
-            : unit?.toLowerCase() === "m"
-              ? 1_000_000
-              : 1
-
-        return String(Math.round(amount * multiplier))
-      }
-
-      const salaryMin =
-        job.salaryMin?.toString() ||
-        (salaryMatch ? toAmount(salaryMatch[1], salaryMatch[2]) : "")
-
-      const salaryMax =
-        job.salaryMax?.toString() ||
-        (salaryMatch ? toAmount(salaryMatch[3], salaryMatch[4]) : "")
-
-      // ========================================
-      // DESCRIPTION
-      // ========================================
-
-      const description = job.description || ""
-
-      const responsibilitiesMatch = description.match(
-        /Responsibilities\s*\n([\s\S]*?)(?=\n\nRequirements|\n\nBenefits|$)/i
-      )
-
-      const requirementsMatch = description.match(
-        /Requirements\s*\n([\s\S]*?)(?=\n\nBenefits|$)/i
-      )
-
-      const benefitsMatch = description.match(/Benefits\s*\n([\s\S]*?)$/i)
-
-      // ========================================
-      // PREFILL FORM
-      // ========================================
-
-      setForm({
-        title: job.title || "",
-        company: job.company || "",
-        category: job.category || "Design",
-        salaryMin,
-        salaryMax,
-        currency: job.currency || "USD",
-        location: job.location || "",
-        responsibilities: responsibilitiesMatch?.[1]?.trim() || description,
-        requirements: requirementsMatch?.[1]?.trim() || "",
-        benefits: benefitsMatch?.[1]?.trim() || "",
-      })
-
-      setRemote(job.location?.toLowerCase() === "remote")
-    } catch (error) {
-      console.error("LOAD JOB ERROR:", error)
-
-      setPageError(
-        getJobsErrorMessage(error, "Unable to load the job for editing.")
-      )
-    } finally {
-      activeRequestRef.current = null
-      setLoadingJob(false)
-      setJobLoaded(true)
-    }
-  }, [editId, currentUser?.id, currentUser?.email, currentUser?.role])
-
-  // ==========================================
-  // INITIAL EDIT FETCH
-  // ==========================================
-
-  useEffect(() => {
-    if (!editModeReady || sessionPending) {
+    if (!currentUser.id && !currentUser.email) {
+      const message = "Please log in before publishing a job."
+      setPageError(message)
+      toast.error(message)
       return
     }
 
-    if (!editId) {
-      setJobLoaded(true)
-      return
-    }
+    const controller = new AbortController()
 
-    if (!currentUser) {
-      setPageError("Please sign in to edit this job.")
-      setJobLoaded(true)
-      return
-    }
-
-    void loadExistingJob()
-  }, [
-    editModeReady,
-    sessionPending,
-    editId,
-    currentUser?.id,
-    currentUser?.email,
-    currentUser?.role,
-    loadExistingJob,
-  ])
-
-  // ==========================================
-  // VALIDATION
-  // ==========================================
-
-  const validateForm = () => {
-    if (!form.title.trim()) {
-      toast.add({
-        title: "Job title required",
-        description: "Please enter a job title.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    if (!form.company.trim()) {
-      toast.add({
-        title: "Company name required",
-        description: "Please enter your company name.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    if (!form.location.trim() && !remote) {
-      toast.add({
-        title: "Location required",
-        description: "Please enter the job location.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    const min = Number(form.salaryMin)
-    const max = Number(form.salaryMax)
-
-    if (form.salaryMin && (!Number.isFinite(min) || min < 0)) {
-      toast.add({
-        title: "Invalid minimum salary",
-        description: "Enter a valid minimum salary.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    if (form.salaryMax && (!Number.isFinite(max) || max < 0)) {
-      toast.add({
-        title: "Invalid maximum salary",
-        description: "Enter a valid maximum salary.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    if (form.salaryMin && form.salaryMax && max < min) {
-      toast.add({
-        title: "Invalid salary range",
-        description: "Maximum salary must be greater than minimum salary.",
-        type: "error",
-      })
-
-      return false
-    }
-
-    return true
-  }
-
-  // ==========================================
-  // BUILD API PAYLOAD
-  // ==========================================
-
-  const buildPayload = (status: "active" | "draft"): JobInput => {
-    const symbols: Record<string, string> = {
-      USD: "$",
-      BDT: "৳",
-      EUR: "€",
-      GBP: "£",
-    }
-
-    const symbol = symbols[form.currency] || ""
-
-    const formatAmount = (value: string) => {
-      const amount = Number(value)
-
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return ""
-      }
-
-      return amount >= 1000 && amount % 1000 === 0
-        ? `${symbol}${amount / 1000}k`
-        : `${symbol}${amount}`
-    }
-
-    const salaryParts = [
-      formatAmount(form.salaryMin),
-      formatAmount(form.salaryMax),
-    ].filter(Boolean)
-
-    const salary =
-      salaryParts.length === 2
-        ? `${salaryParts[0]} - ${salaryParts[1]}`
-        : salaryParts[0] || ""
-
-    const description = [
-      form.responsibilities.trim()
-        ? `Responsibilities\n${form.responsibilities.trim()}`
-        : "",
-
-      form.requirements.trim()
-        ? `Requirements\n${form.requirements.trim()}`
-        : "",
-
-      form.benefits.trim() ? `Benefits\n${form.benefits.trim()}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n\n")
-
-    return {
-      title: form.title.trim(),
-      company: form.company.trim(),
-      category: form.category,
-      location: remote ? "Remote" : form.location.trim(),
-      salary,
-      description,
-      status,
-      closed: status === "draft",
-    }
-  }
-
-  // ==========================================
-  // SUBMIT
-  // ==========================================
-
-  const handleSubmit = async (status: "active" | "draft") => {
-    // ----------------------------------------
-    // AUTH
-    // ----------------------------------------
-
-    if (!currentUser) {
-      toast.add({
-        title: "Authentication required",
-        description: "Please sign in before posting a job.",
-        type: "error",
-      })
-
-      return
-    }
-
-    // ----------------------------------------
-    // ROLE
-    // ----------------------------------------
-
-    const role = currentUser.role?.toLowerCase()
-
-    if (role !== "recruiter" && role !== "admin") {
-      toast.add({
-        title: "Access denied",
-        description: "Only recruiters can publish jobs.",
-        type: "error",
-      })
-
-      return
-    }
-
-    // ----------------------------------------
-    // DUPLICATE CLICK
-    // ----------------------------------------
-
-    if (submitting) {
-      return
-    }
-
-    // ----------------------------------------
-    // VALIDATION
-    // ----------------------------------------
-
-    if (!validateForm()) {
-      return
-    }
-
-    // ----------------------------------------
-    // START SUBMISSION
-    // ----------------------------------------
+    activeRequestRef.current?.abort()
+    activeRequestRef.current = controller
 
     setSubmitting(true)
-    setPageError(null)
+
+    const isPublishing = jobStatus === "draft" || !editId
+
+    const targetStatus = jobStatus
 
     try {
-      const payload = buildPayload(status)
+      const payload = buildPayload(targetStatus)
 
-      console.log("================================")
-      console.log("JOB SUBMISSION")
-      console.log("Edit ID:", editId)
-      console.log("Status:", status)
-      console.log("Payload:", payload)
-      console.log("================================")
-
-      // ======================================
-      // UPDATE EXISTING JOB
-      // ======================================
+      let savedJob
 
       if (editId) {
-        const wasDraft = jobStatus === "draft"
-
-        await updateJob(editId, payload)
-
-        // Update local status
-        setJobStatus(status)
-
-        // ------------------------------------
-        // SAVE DRAFT
-        // ------------------------------------
-
-        if (status === "draft") {
-          setResult("draft")
-
-          toast.add({
-            title: "Draft saved successfully!",
-            description: "Your job has been saved as a draft.",
-            type: "success",
-          })
-
-          return
-        }
-
-        // ------------------------------------
-        // DRAFT -> PUBLISHED
-        // ------------------------------------
-
-        if (wasDraft) {
-          setResult("published")
-
-          toast.add({
-            title: "Job published successfully!",
-            description: "Your job is now available to job seekers.",
-            type: "success",
-          })
-
-          // Billing check happens AFTER publish
-          try {
-            const billing = await getBillingSummary()
-
-            if (
-              billing.plan !== "premium" &&
-              billing.publishedJobLimit !== null &&
-              billing.publishedJobsUsed >= billing.publishedJobLimit
-            ) {
-              setShowUpgradeDialog(true)
-            }
-          } catch (billingError) {
-            console.error("POST-PUBLISH BILLING CHECK ERROR:", billingError)
-          }
-
-          return
-        }
-
-        // ------------------------------------
-        // UPDATE ACTIVE JOB
-        // ------------------------------------
-
-        setResult("updated")
-
-        toast.add({
-          title: "Job updated successfully!",
-          description: "Your changes have been saved.",
-          type: "success",
+        savedJob = await updateJob(editId, payload, {
+          signal: controller.signal,
         })
-
-        return
+      } else {
+        savedJob = await createJob(payload, {
+          signal: controller.signal,
+        })
       }
 
-      // ======================================
-      // CREATE NEW JOB
-      // ======================================
+      if (savedJob?._id) {
+        rememberJobOwner(savedJob._id, {
+          id:
+            savedJob.recruiterId ||
+            savedJob.createdBy ||
+            savedJob.ownerId ||
+            savedJob.userId ||
+            currentUser.id ||
+            undefined,
+          email: savedJob.ownerEmail || currentUser.email || undefined,
+        })
+      }
 
-      const createdJob = await createJob(payload)
-
-      // Save owner information locally
-      rememberJobOwner(createdJob, currentUser)
-
-      setJobStatus(status)
-
-      // --------------------------------------
-      // SAVE NEW DRAFT
-      // --------------------------------------
-
-      if (status === "draft") {
+      if (targetStatus === "draft") {
         setResult("draft")
 
-        toast.add({
-          title: "Draft saved successfully!",
-          description: "Your draft has been saved.",
-          type: "success",
-        })
+        toast.success(
+          editId ? "Job draft updated successfully." : "Job saved as draft."
+        )
 
+        router.refresh()
         return
       }
 
-      // --------------------------------------
-      // NEW JOB PUBLISHED
-      // --------------------------------------
+      setResult(editId ? "updated" : "published")
 
-      setResult("published")
+      toast.success(
+        editId ? "Job published successfully!" : "Job published successfully!"
+      )
 
-      toast.add({
-        title: "Job published successfully!",
-        description: "Your job is now available to job seekers.",
-        type: "success",
-      })
-
-      // --------------------------------------
-      // CHECK BILLING AFTER SUCCESS
-      // --------------------------------------
+      /*
+       * IMPORTANT:
+       * Backend is the source of truth for the 5-job limit.
+       * We don't check billing before publishing because that
+       * can block the actual POST /api/jobs request.
+       */
 
       try {
-        const billing = await getBillingSummary()
-
-        if (
-          billing.plan !== "premium" &&
-          billing.publishedJobLimit !== null &&
-          billing.publishedJobsUsed >= billing.publishedJobLimit
-        ) {
-          setShowUpgradeDialog(true)
-        }
+        await getBillingSummary({
+          signal: controller.signal,
+        })
       } catch (billingError) {
-        // Do NOT break successful publishing
-        console.error("POST-CREATE BILLING CHECK ERROR:", billingError)
+        // Publishing already succeeded, so billing-summary failure
+        // must not make the user think the job failed.
+        console.warn(
+          "Billing summary refresh failed after publishing:",
+          billingError
+        )
       }
+
+      /*
+       * Refresh the current Next.js route after successful publish.
+       * This updates server/client data without a full browser reload.
+       */
+      router.refresh()
+
+      /*
+       * Small delay gives the success state/toast time to render
+       * before navigating/reloading the current route.
+       */
+      setTimeout(() => {
+        router.refresh()
+      }, 300)
     } catch (error) {
-      console.error("================================")
-      console.error("SAVE JOB ERROR:", error)
-      console.error("================================")
+      console.error("Job submit error:", error)
 
-      // ======================================
-      // FREE PLAN LIMIT
-      // ======================================
-
-      if (isJobsApiError(error) && error.status === 429) {
-        setShowUpgradeDialog(true)
-
+      if (error instanceof DOMException && error.name === "AbortError") {
         return
       }
 
-      // ======================================
-      // NORMAL ERROR
-      // ======================================
+      /*
+       * Backend should return 429 when the recruiter has reached
+       * the free-plan active-job limit.
+       */
+      if (isJobsApiError(error) && error.status === 429) {
+        setShowUpgradeDialog(true)
+        return
+      }
 
-      toast.add({
-        title: "Unable to save job",
-        description: getJobsErrorMessage(
-          error,
-          "Unable to publish this job. Please try again."
-        ),
-        type: "error",
-      })
+      const message = getJobsErrorMessage(
+        error,
+        isPublishing
+          ? "Unable to publish this job. Please try again."
+          : "Unable to save this job. Please try again."
+      )
+
+      setPageError(message)
+      toast.error(message)
     } finally {
+      activeRequestRef.current = null
       setSubmitting(false)
     }
   }
 
-  // ==========================================
-  // SUCCESS SCREEN
-  // ==========================================
+  if (sessionLoading || loadingJob) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex items-center gap-3 text-white/60">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          <span>Loading...</span>
+        </div>
+      </div>
+    )
+  }
 
   if (result) {
-    const isDraft = result === "draft"
-
-    const isUpdated = result === "updated"
-
     return (
-      <>
-        <UpgradeDialog
-          open={showUpgradeDialog}
-          upgrading={upgrading}
-          onUpgrade={() => void handleUpgrade()}
-          onClose={() => setShowUpgradeDialog(false)}
-        />
-
-        <div className="space-y-6">
-          <PageHeader
-            title={
-              isUpdated
-                ? "Job updated"
-                : isDraft
-                  ? "Draft saved"
-                  : "Job published"
-            }
-            description={
-              isUpdated
-                ? "Your job post has been updated successfully."
-                : isDraft
-                  ? "Your job post has been saved as a draft."
-                  : "Your role is now live on HireLoop and visible to job seekers."
-            }
-          />
-
-          <DashboardCard className="flex flex-col items-center px-6 py-14 text-center">
-            <span
-              className={cn(
-                "flex size-14 items-center justify-center rounded-full",
-                isDraft
-                  ? "bg-[#f59e0b]/15 text-[#fcd34d]"
-                  : "bg-[#22c55e]/15 text-[#86efac]"
-              )}
-            >
-              {isDraft ? (
-                <Clock className="size-7" />
-              ) : (
-                <CheckCircle2 className="size-7" />
-              )}
-            </span>
-
-            <h2 className="mt-4 text-lg font-semibold text-[#ededef]">
-              {form.title || "Untitled role"}
-
-              {isDraft
-                ? " saved as draft"
-                : isUpdated
-                  ? " updated successfully"
-                  : " is live"}
-            </h2>
-
-            <p className="mt-1 max-w-md text-sm text-[#8b8b96]">
-              {isDraft
-                ? "You can publish this job when you are ready."
-                : isUpdated
-                  ? "Your updated job information is now saved."
-                  : "Applications can now arrive in your dashboard."}
-            </p>
-
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
-              <Link href="/dashboard/recruiter/jobs" className={primaryButton}>
-                Go to Manage Jobs
-              </Link>
-
-              {!editId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(initialForm)
-                    setRemote(false)
-                    setJobStatus("active")
-                    setResult(null)
-                  }}
-                  className={secondaryButton}
-                >
-                  Post another job
-                </button>
-              )}
-            </div>
-          </DashboardCard>
-        </div>
-      </>
-    )
-  }
-
-  // ==========================================
-  // LOADING
-  // ==========================================
-
-  if (
-    sessionPending ||
-    !editModeReady ||
-    loadingJob ||
-    (editId && !jobLoaded && !pageError)
-  ) {
-    return (
-      <div className="space-y-5">
-        <div className="h-8 w-48 animate-pulse rounded bg-white/10" />
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="space-y-4 lg:col-span-2">
-            <DashboardCard className="space-y-5 p-5">
-              {Array.from({
-                length: 7,
-              }).map((_, index) => (
-                <div
-                  key={index}
-                  className="h-10 animate-pulse rounded bg-white/[0.06]"
-                />
-              ))}
-            </DashboardCard>
+      <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+        <div className="rounded-2xl border border-white/10 bg-[#151515] p-8 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ccff00]/10">
+            <CheckCircle2 className="h-8 w-8 text-[#ccff00]" />
           </div>
 
-          <DashboardCard className="h-64 animate-pulse" />
+          <h1 className="mt-5 text-2xl font-semibold text-white">
+            {result === "draft"
+              ? "Job Saved as Draft"
+              : result === "updated"
+                ? "Job Published Successfully"
+                : "Job Published Successfully"}
+          </h1>
+
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/60">
+            {result === "draft"
+              ? "Your job has been saved as a draft. You can publish it later."
+              : "Your job has been published successfully and the route has been refreshed."}
+          </p>
+
+          <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+            <Link
+              href="/recruiter/jobs"
+              className={cn(
+                primaryButton,
+                "inline-flex items-center justify-center"
+              )}
+            >
+              View My Jobs
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => {
+                setResult(null)
+
+                if (!editId) {
+                  setForm(initialForm)
+                  setRemote(false)
+                  setJobStatus("active")
+                }
+              }}
+              className={cn(
+                secondaryButton,
+                "inline-flex items-center justify-center"
+              )}
+            >
+              {result === "draft" ? "Continue Editing" : "Post Another Job"}
+            </button>
+          </div>
         </div>
       </div>
     )
   }
-
-  // ==========================================
-  // ERROR SCREEN
-  // ==========================================
-
-  if (pageError) {
-    return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Unable to load job"
-          description="We couldn't retrieve the job information."
-        />
-
-        <DashboardCard className="flex flex-col items-center gap-3 p-8 text-center">
-          <AlertCircle className="size-9 text-red-400" />
-
-          <p className="max-w-md text-sm text-[#a0a0ab]">{pageError}</p>
-
-          <button
-            type="button"
-            onClick={() => void loadExistingJob()}
-            className={primaryButton}
-          >
-            Try again
-          </button>
-
-          <Link href="/dashboard/recruiter/jobs" className={secondaryButton}>
-            Back to jobs
-          </Link>
-        </DashboardCard>
-      </div>
-    )
-  }
-
-  // ==========================================
-  // MAIN FORM
-  // ==========================================
 
   return (
     <>
       <UpgradeDialog
         open={showUpgradeDialog}
-        upgrading={upgrading}
-        onUpgrade={() => void handleUpgrade()}
         onClose={() => setShowUpgradeDialog(false)}
+        upgrading={upgrading}
+        onUpgrade={handleUpgrade}
       />
 
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <PageHeader
-          title={editId ? "Job Settings" : "Post a Job"}
+          title={editId ? "Edit Job" : "Post a Job"}
           description={
             editId
-              ? "Update the job details supported by the HireLoop jobs API."
-              : "Reach qualified candidates by creating a new job post."
+              ? "Update your job posting and publish the latest changes."
+              : "Find the right candidate by creating a clear and compelling job post."
           }
-          actions={
-            <Link href="/dashboard/recruiter/jobs" className={secondaryButton}>
-              <ArrowLeft className="size-3.5" />
-              Back to jobs
+          action={
+            <Link
+              href="/recruiter/jobs"
+              className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Jobs
             </Link>
           }
         />
 
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
+        {pageError && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
 
-            if (!submitting) {
-              void handleSubmit("active")
-            }
-          }}
-          className="grid gap-4 lg:grid-cols-3"
-        >
-          {/* ==================================
-              LEFT SIDE
-          ================================== */}
+            <div className="flex-1">
+              <p>{pageError}</p>
+            </div>
 
-          <div className="space-y-4 lg:col-span-2">
-            {/* JOB INFO */}
-
-            <SectionCard
-              title="Job info"
-              description="The essentials candidates see first."
-              bodyClassName="p-5"
+            <button
+              type="button"
+              onClick={() => setPageError("")}
+              className="text-red-300/60 transition hover:text-red-200"
+              aria-label="Close error"
             >
-              <div className="space-y-4">
-                {/* JOB TITLE */}
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
+        <form
+          onSubmit={handleSubmit}
+          className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
+        >
+          <div className="space-y-6">
+            <SectionCard>
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ccff00]/10">
+                  <BriefcaseBusiness className="h-5 w-5 text-[#ccff00]" />
+                </div>
 
                 <div>
-                  <FieldLabel htmlFor="job-title">Job title *</FieldLabel>
+                  <h2 className="text-lg font-semibold text-white">
+                    Job Information
+                  </h2>
+
+                  <p className="text-sm text-white/50">
+                    Basic information about the position.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-5">
+                <div>
+                  <FieldLabel>Job Title</FieldLabel>
 
                   <input
-                    id="job-title"
-                    required
-                    maxLength={120}
+                    type="text"
                     value={form.title}
-                    onChange={(event) => update("title", event.target.value)}
-                    placeholder="e.g. Senior Product Designer"
+                    onChange={(e) => handleChange("title", e.target.value)}
+                    placeholder="e.g. Senior UI/UX Designer"
                     className={inputClass}
+                    disabled={submitting}
                   />
                 </div>
 
-                {/* COMPANY */}
-
-                <div>
-                  <FieldLabel htmlFor="company-name">Company name *</FieldLabel>
-
-                  <input
-                    id="company-name"
-                    required
-                    maxLength={100}
-                    value={form.company}
-                    onChange={(event) => update("company", event.target.value)}
-                    placeholder="e.g. Google, Microsoft, Spotify"
-                    className={inputClass}
-                  />
-                </div>
-
-                {/* CATEGORY */}
-
-                <div>
-                  <FieldLabel htmlFor="job-category">Job category</FieldLabel>
-
-                  <select
-                    id="job-category"
-                    value={form.category}
-                    onChange={(event) => update("category", event.target.value)}
-                    className={inputClass}
-                  >
-                    <option>Design</option>
-
-                    <option>Engineering</option>
-
-                    <option>Product</option>
-
-                    <option>Marketing</option>
-
-                    <option>Sales</option>
-
-                    <option>Operations</option>
-                  </select>
-                </div>
-
-                {/* SALARY */}
-
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-5 sm:grid-cols-2">
                   <div>
-                    <FieldLabel htmlFor="salary-min">Salary min</FieldLabel>
+                    <FieldLabel>Company</FieldLabel>
 
                     <input
-                      id="salary-min"
-                      type="number"
-                      min="0"
-                      value={form.salaryMin}
-                      onChange={(event) =>
-                        update("salaryMin", event.target.value)
-                      }
-                      placeholder="120000"
+                      type="text"
+                      value={form.company}
+                      onChange={(e) => handleChange("company", e.target.value)}
+                      placeholder="Company name"
                       className={inputClass}
+                      disabled={submitting}
                     />
                   </div>
 
                   <div>
-                    <FieldLabel htmlFor="salary-max">Salary max</FieldLabel>
-
-                    <input
-                      id="salary-max"
-                      type="number"
-                      min="0"
-                      value={form.salaryMax}
-                      onChange={(event) =>
-                        update("salaryMax", event.target.value)
-                      }
-                      placeholder="160000"
-                      className={inputClass}
-                    />
-                  </div>
-
-                  <div>
-                    <FieldLabel htmlFor="currency">Currency</FieldLabel>
+                    <FieldLabel>Category</FieldLabel>
 
                     <select
-                      id="currency"
-                      value={form.currency}
-                      onChange={(event) =>
-                        update("currency", event.target.value)
-                      }
+                      value={form.category}
+                      onChange={(e) => handleChange("category", e.target.value)}
                       className={inputClass}
+                      disabled={submitting}
                     >
-                      <option>USD</option>
-
-                      <option>EUR</option>
-
-                      <option>GBP</option>
-
-                      <option>BDT</option>
+                      <option value="Design">Design</option>
+                      <option value="Development">Development</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Writing">Writing</option>
+                      <option value="Finance">Finance</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Customer Support">Customer Support</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
                 </div>
 
-                {/* LOCATION */}
-
                 <div>
-                  <FieldLabel htmlFor="job-location">Location</FieldLabel>
+                  <FieldLabel>Location</FieldLabel>
 
-                  <input
-                    id="job-location"
-                    required={!remote}
-                    disabled={remote}
-                    value={remote ? "Remote" : form.location}
-                    onChange={(event) => update("location", event.target.value)}
-                    placeholder="City, country"
-                    className={cn(inputClass, remote && "opacity-60")}
-                  />
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      value={form.location}
+                      onChange={(e) => handleChange("location", e.target.value)}
+                      placeholder="e.g. Dhaka, Bangladesh"
+                      className={cn(inputClass, remote && "opacity-50")}
+                      disabled={submitting || remote}
+                    />
+
+                    <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-white/60">
+                      <input
+                        type="checkbox"
+                        checked={remote}
+                        onChange={(e) => {
+                          setRemote(e.target.checked)
+
+                          if (e.target.checked) {
+                            handleChange("location", "")
+                          }
+                        }}
+                        disabled={submitting}
+                        className="h-4 w-4 accent-[#ccff00]"
+                      />
+                      Remote
+                    </label>
+                  </div>
                 </div>
 
-                {/* REMOTE */}
+                <div>
+                  <FieldLabel>Salary</FieldLabel>
 
-                <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-[#a0a0ab]">
-                  <input
-                    type="checkbox"
-                    checked={remote}
-                    onChange={(event) => {
-                      const checked = event.target.checked
-
-                      setRemote(checked)
-
-                      if (checked) {
-                        update("location", "Remote")
-                      } else {
-                        update("location", "")
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.salaryMin}
+                      onChange={(e) =>
+                        handleChange("salaryMin", e.target.value)
                       }
-                    }}
-                    className="size-4 rounded border-white/20 bg-[#0f0f13] accent-[#5c53fe]"
-                  />
-                  This is a fully remote role
-                </label>
+                      placeholder="Min"
+                      className={inputClass}
+                      disabled={submitting}
+                    />
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={form.salaryMax}
+                      onChange={(e) =>
+                        handleChange("salaryMax", e.target.value)
+                      }
+                      placeholder="Max"
+                      className={inputClass}
+                      disabled={submitting}
+                    />
+
+                    <select
+                      value={form.currency}
+                      onChange={(e) => handleChange("currency", e.target.value)}
+                      className={inputClass}
+                      disabled={submitting}
+                    >
+                      <option value="USD">USD</option>
+                      <option value="BDT">BDT</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             </SectionCard>
 
-            {/* JOB DESCRIPTION */}
+            <SectionCard>
+              <div className="mb-6">
+                <h2 className="text-lg font-semibold text-white">
+                  Job Description
+                </h2>
 
-            <SectionCard
-              title="Job description"
-              description="Give candidates enough detail to decide if the role is right for them."
-              bodyClassName="p-5"
-            >
-              <div className="space-y-4">
-                {/* RESPONSIBILITIES */}
+                <p className="mt-1 text-sm text-white/50">
+                  Give candidates a clear idea of what the role involves.
+                </p>
+              </div>
 
+              <div className="space-y-5">
                 <div>
-                  <FieldLabel htmlFor="responsibilities">
-                    Responsibilities
-                  </FieldLabel>
+                  <FieldLabel>Responsibilities</FieldLabel>
 
                   <textarea
-                    id="responsibilities"
-                    rows={5}
                     value={form.responsibilities}
-                    onChange={(event) =>
-                      update("responsibilities", event.target.value)
+                    onChange={(e) =>
+                      handleChange("responsibilities", e.target.value)
                     }
-                    placeholder="What will this person own day to day?"
-                    className={cn(inputClass, "resize-none")}
+                    placeholder="Describe the main responsibilities of this role..."
+                    rows={6}
+                    className={cn(inputClass, "resize-y py-3")}
+                    disabled={submitting}
                   />
                 </div>
 
-                {/* REQUIREMENTS */}
-
                 <div>
-                  <FieldLabel htmlFor="requirements">Requirements</FieldLabel>
+                  <FieldLabel>Requirements</FieldLabel>
 
                   <textarea
-                    id="requirements"
-                    rows={5}
                     value={form.requirements}
-                    onChange={(event) =>
-                      update("requirements", event.target.value)
+                    onChange={(e) =>
+                      handleChange("requirements", e.target.value)
                     }
-                    placeholder="Skills, experience, and qualifications."
-                    className={cn(inputClass, "resize-none")}
+                    placeholder="List the required skills, experience and qualifications..."
+                    rows={6}
+                    className={cn(inputClass, "resize-y py-3")}
+                    disabled={submitting}
                   />
                 </div>
 
-                {/* BENEFITS */}
-
                 <div>
-                  <FieldLabel htmlFor="benefits">
-                    Benefits (optional)
-                  </FieldLabel>
+                  <FieldLabel>Benefits</FieldLabel>
 
                   <textarea
-                    id="benefits"
-                    rows={3}
                     value={form.benefits}
-                    onChange={(event) => update("benefits", event.target.value)}
-                    placeholder="Equity, remote budget, learning stipend..."
-                    className={cn(inputClass, "resize-none")}
+                    onChange={(e) => handleChange("benefits", e.target.value)}
+                    placeholder="Mention salary benefits, flexible hours, remote work, etc."
+                    rows={5}
+                    className={cn(inputClass, "resize-y py-3")}
+                    disabled={submitting}
                   />
                 </div>
               </div>
             </SectionCard>
-          </div>
 
-          {/* ==================================
-              RIGHT SIDEBAR
-          ================================== */}
-
-          <div className="space-y-4">
-            <DashboardCard className="p-5">
-              <h2 className="text-sm font-semibold text-[#ededef]">
-                Ready to publish?
-              </h2>
-
-              <ul className="mt-3 space-y-2 text-[11px] text-[#8b8b96]">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-[#22c55e]" />
-                  Job information is ready
-                </li>
-
-                <li className="flex items-start gap-2">
-                  <Sparkles className="mt-0.5 size-3.5 shrink-0 text-[#b8b2ff]" />
-                  Featured placement available on Enterprise
-                </li>
-              </ul>
-
-              {/* ==================================
-                  PUBLISH / UPDATE BUTTON
-              ================================== */}
+            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <Link
+                href="/recruiter/jobs"
+                className={cn(
+                  secondaryButton,
+                  "inline-flex items-center justify-center"
+                )}
+              >
+                Cancel
+              </Link>
 
               <button
                 type="submit"
-                disabled={submitting || loadingJob}
+                disabled={submitting}
                 className={cn(
                   primaryButton,
-                  "mt-5 w-full",
-                  (submitting || loadingJob) && "cursor-not-allowed opacity-70"
+                  "inline-flex min-w-[160px] items-center justify-center gap-2"
                 )}
               >
                 {submitting ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+
+                    {jobStatus === "draft" ? "Saving..." : "Publishing..."}
+                  </>
                 ) : (
-                  <BriefcaseBusiness className="size-4" />
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+
+                    {jobStatus === "draft"
+                      ? "Save Draft"
+                      : editId
+                        ? "Publish Changes"
+                        : "Publish Job"}
+                  </>
                 )}
-
-                {submitting
-                  ? editId
-                    ? "Updating..."
-                    : "Posting..."
-                  : editId
-                    ? jobStatus === "draft"
-                      ? "Publish job"
-                      : "Update job"
-                    : "Publish job"}
               </button>
+            </div>
+          </div>
 
-              {/* ==================================
-                  SAVE AS DRAFT
-              ================================== */}
+          <div className="space-y-6">
+            <DashboardCard>
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5">
+                  <Clock className="h-5 w-5 text-white/70" />
+                </div>
 
-              <button
-                type="button"
-                disabled={submitting || loadingJob}
-                onClick={() => {
-                  if (!submitting) {
-                    void handleSubmit("draft")
-                  }
-                }}
-                className={cn(secondaryButton, "mt-2 w-full")}
-              >
-                {submitting ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Clock className="size-4" />
-                )}
-                Save as draft
-              </button>
+                <div>
+                  <h3 className="font-medium text-white">Job Visibility</h3>
 
-              <p className="mt-3 text-center text-[10px] leading-relaxed text-[#6e6e78]">
-                Your job information will be saved to HireLoop.
-              </p>
+                  <p className="mt-1 text-sm leading-6 text-white/50">
+                    Published jobs are visible to job seekers. Draft jobs remain
+                    private until published.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setJobStatus("active")}
+                  disabled={submitting}
+                  className={cn(
+                    "w-full rounded-xl border px-4 py-3 text-left transition",
+                    jobStatus === "active"
+                      ? "border-[#ccff00]/40 bg-[#ccff00]/10"
+                      : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-white">
+                      Publish immediately
+                    </span>
+
+                    {jobStatus === "active" && (
+                      <CheckCircle2 className="h-4 w-4 text-[#ccff00]" />
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-xs text-white/40">
+                    Job seekers can discover and apply.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setJobStatus("draft")}
+                  disabled={submitting}
+                  className={cn(
+                    "w-full rounded-xl border px-4 py-3 text-left transition",
+                    jobStatus === "draft"
+                      ? "border-[#ccff00]/40 bg-[#ccff00]/10"
+                      : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-white">
+                      Save as draft
+                    </span>
+
+                    {jobStatus === "draft" && (
+                      <CheckCircle2 className="h-4 w-4 text-[#ccff00]" />
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-xs text-white/40">
+                    Keep it private and finish later.
+                  </p>
+                </button>
+              </div>
+            </DashboardCard>
+
+            <DashboardCard>
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ccff00]/10">
+                  <Sparkles className="h-5 w-5 text-[#ccff00]" />
+                </div>
+
+                <div>
+                  <h3 className="font-medium text-white">Free Plan</h3>
+
+                  <p className="mt-1 text-sm leading-6 text-white/50">
+                    Free recruiter accounts can publish up to 5 active jobs.
+                    Premium gives you more publishing capacity.
+                  </p>
+                </div>
+              </div>
             </DashboardCard>
           </div>
         </form>
