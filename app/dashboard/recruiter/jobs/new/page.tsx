@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
+import { rememberJobOwner } from "@/app/lib/job-ownership"
 
 import {
   getJob,
