@@ -41,7 +41,7 @@ import { rememberJobOwner } from "@/app/lib/job-ownership"
 
 import { toast } from "sonner"
 
-import { cn } from "@/app/lib/utils"
+import { cn } from "@/lib/utils"
 
 const inputClass =
   "w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#ccff00]/40 disabled:cursor-not-allowed disabled:opacity-50"
