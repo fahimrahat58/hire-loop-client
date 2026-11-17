@@ -155,27 +155,34 @@ export default function RecruiterNewJobPage() {
     : null
 
   const [form, setForm] = useState<FormData>(initialForm)
+
   const [remote, setRemote] = useState(false)
+
   const [result, setResult] = useState<ResultType>(null)
 
   const [editId, setEditId] = useState<string | null>(null)
+
   const [editModeReady, setEditModeReady] = useState(false)
+
   const [jobLoaded, setJobLoaded] = useState(false)
+
   const [loadingJob, setLoadingJob] = useState(false)
 
   const [submitting, setSubmitting] = useState(false)
+
   const [pageError, setPageError] = useState<string | null>(null)
 
   const [jobStatus, setJobStatus] = useState<"active" | "draft">("active")
 
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
+
   const [upgrading, setUpgrading] = useState(false)
 
   const activeRequestRef = useRef<string | null>(null)
 
-  // --------------------------------
+  // ==========================================
   // DETECT EDIT MODE
-  // --------------------------------
+  // ==========================================
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -185,9 +192,9 @@ export default function RecruiterNewJobPage() {
     setEditModeReady(true)
   }, [])
 
-  // --------------------------------
+  // ==========================================
   // FORM UPDATE
-  // --------------------------------
+  // ==========================================
 
   const update = (field: keyof FormData, value: string) => {
     setForm((current) => ({
@@ -196,9 +203,9 @@ export default function RecruiterNewJobPage() {
     }))
   }
 
-  // --------------------------------
+  // ==========================================
   // STRIPE CHECKOUT
-  // --------------------------------
+  // ==========================================
 
   const handleUpgrade = async () => {
     if (upgrading) return
@@ -207,6 +214,7 @@ export default function RecruiterNewJobPage() {
 
     try {
       const tokenResult = await authClient.token()
+
       const token = tokenResult.data?.token
 
       if (!token) {
@@ -248,6 +256,8 @@ export default function RecruiterNewJobPage() {
 
       window.location.assign(checkoutUrl)
     } catch (error) {
+      console.error("UPGRADE ERROR:", error)
+
       toast.add({
         title: "Upgrade failed",
         description:
@@ -261,16 +271,18 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  // --------------------------------
-  // FETCH JOB FOR EDITING
-  // --------------------------------
+  // ==========================================
+  // LOAD EXISTING JOB
+  // ==========================================
 
   const loadExistingJob = useCallback(async () => {
     if (!editId || !currentUser) return
 
     const requestKey = `${editId}-${currentUser.id}-${currentUser.email}`
 
-    if (activeRequestRef.current === requestKey) return
+    if (activeRequestRef.current === requestKey) {
+      return
+    }
 
     activeRequestRef.current = requestKey
 
@@ -287,7 +299,10 @@ export default function RecruiterNewJobPage() {
         throw new Error("You cannot edit this job.")
       }
 
-      // Verify job ownership
+      // ========================================
+      // VERIFY OWNERSHIP
+      // ========================================
+
       if (role === "recruiter") {
         const owner =
           job.recruiterId ||
@@ -299,22 +314,30 @@ export default function RecruiterNewJobPage() {
 
         const ownerValue = String(owner).toLowerCase()
 
-        const ownsJob =
-          ownerValue === currentUser.id?.toLowerCase() ||
-          ownerValue === currentUser.email?.toLowerCase()
+        const userId = String(currentUser.id || "").toLowerCase()
+
+        const userEmail = String(currentUser.email || "").toLowerCase()
+
+        const ownsJob = ownerValue === userId || ownerValue === userEmail
 
         if (!ownsJob) {
           throw new Error("You can only edit your own job posts.")
         }
       }
 
+      // ========================================
       // JOB STATUS
+      // ========================================
+
       const existingStatus =
         job.status?.toLowerCase() === "draft" ? "draft" : "active"
 
       setJobStatus(existingStatus)
 
+      // ========================================
       // SALARY
+      // ========================================
+
       const salary = job.salary || ""
 
       const salaryMatch = salary.match(
@@ -324,7 +347,9 @@ export default function RecruiterNewJobPage() {
       const toAmount = (value: string, unit?: string) => {
         const amount = Number(value.replaceAll(",", ""))
 
-        if (!Number.isFinite(amount)) return ""
+        if (!Number.isFinite(amount)) {
+          return ""
+        }
 
         const multiplier =
           unit?.toLowerCase() === "k"
@@ -344,7 +369,10 @@ export default function RecruiterNewJobPage() {
         job.salaryMax?.toString() ||
         (salaryMatch ? toAmount(salaryMatch[3], salaryMatch[4]) : "")
 
+      // ========================================
       // DESCRIPTION
+      // ========================================
+
       const description = job.description || ""
 
       const responsibilitiesMatch = description.match(
@@ -357,7 +385,10 @@ export default function RecruiterNewJobPage() {
 
       const benefitsMatch = description.match(/Benefits\s*\n([\s\S]*?)$/i)
 
+      // ========================================
       // PREFILL FORM
+      // ========================================
+
       setForm({
         title: job.title || "",
         company: job.company || "",
@@ -385,12 +416,14 @@ export default function RecruiterNewJobPage() {
     }
   }, [editId, currentUser?.id, currentUser?.email, currentUser?.role])
 
-  // --------------------------------
+  // ==========================================
   // INITIAL EDIT FETCH
-  // --------------------------------
+  // ==========================================
 
   useEffect(() => {
-    if (!editModeReady || sessionPending) return
+    if (!editModeReady || sessionPending) {
+      return
+    }
 
     if (!editId) {
       setJobLoaded(true)
@@ -414,9 +447,9 @@ export default function RecruiterNewJobPage() {
     loadExistingJob,
   ])
 
-  // --------------------------------
+  // ==========================================
   // VALIDATION
-  // --------------------------------
+  // ==========================================
 
   const validateForm = () => {
     if (!form.title.trim()) {
@@ -485,9 +518,9 @@ export default function RecruiterNewJobPage() {
     return true
   }
 
-  // --------------------------------
+  // ==========================================
   // BUILD API PAYLOAD
-  // --------------------------------
+  // ==========================================
 
   const buildPayload = (status: "active" | "draft"): JobInput => {
     const symbols: Record<string, string> = {
@@ -516,7 +549,10 @@ export default function RecruiterNewJobPage() {
       formatAmount(form.salaryMax),
     ].filter(Boolean)
 
-    const salary = salaryParts.join(" - ")
+    const salary =
+      salaryParts.length === 2
+        ? `${salaryParts[0]} - ${salaryParts[1]}`
+        : salaryParts[0] || ""
 
     const description = [
       form.responsibilities.trim()
@@ -544,35 +580,15 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  // --------------------------------
-  // CHECK RECRUITER JOB LIMIT
-  // --------------------------------
-
-  const checkJobLimit = async () => {
-    if (!currentUser) {
-      throw new Error("Please sign in before publishing a job.")
-    }
-
-    const billing = await getBillingSummary()
-
-    const isPremium = billing.plan === "premium"
-
-    if (isPremium) {
-      return false
-    }
-
-    const limit = billing.publishedJobLimit ?? 5
-
-    const used = billing.publishedJobsUsed ?? 0
-
-    return used >= limit
-  }
-
-  // --------------------------------
-  // SUBMIT FORM
-  // --------------------------------
+  // ==========================================
+  // SUBMIT
+  // ==========================================
 
   const handleSubmit = async (status: "active" | "draft") => {
+    // ----------------------------------------
+    // AUTH
+    // ----------------------------------------
+
     if (!currentUser) {
       toast.add({
         title: "Authentication required",
@@ -582,6 +598,10 @@ export default function RecruiterNewJobPage() {
 
       return
     }
+
+    // ----------------------------------------
+    // ROLE
+    // ----------------------------------------
 
     const role = currentUser.role?.toLowerCase()
 
@@ -595,153 +615,195 @@ export default function RecruiterNewJobPage() {
       return
     }
 
-    // Prevent duplicate clicks immediately.
-    if (submitting) return
+    // ----------------------------------------
+    // DUPLICATE CLICK
+    // ----------------------------------------
 
-    if (!validateForm()) return
+    if (submitting) {
+      return
+    }
 
-    /*
-     * Important:
-     * Set submitting BEFORE billing check.
-     * Otherwise user can click the button multiple times
-     * while getBillingSummary() is still running.
-     */
+    // ----------------------------------------
+    // VALIDATION
+    // ----------------------------------------
+
+    if (!validateForm()) {
+      return
+    }
+
+    // ----------------------------------------
+    // START SUBMISSION
+    // ----------------------------------------
+
     setSubmitting(true)
+    setPageError(null)
 
     try {
-      // --------------------------------
-      // CHECK PUBLISH LIMIT
-      // --------------------------------
-
-      const isNewPublication =
-        status === "active" && (!editId || jobStatus === "draft")
-
-      if (isNewPublication) {
-        const limitReached = await checkJobLimit()
-
-        if (limitReached) {
-          setShowUpgradeDialog(true)
-          return
-        }
-      }
-
-      // --------------------------------
-      // BUILD PAYLOAD
-      // --------------------------------
-
       const payload = buildPayload(status)
 
-      // --------------------------------
+      console.log("================================")
+      console.log("JOB SUBMISSION")
+      console.log("Edit ID:", editId)
+      console.log("Status:", status)
+      console.log("Payload:", payload)
+      console.log("================================")
+
+      // ======================================
       // UPDATE EXISTING JOB
-      // --------------------------------
+      // ======================================
 
       if (editId) {
+        const wasDraft = jobStatus === "draft"
+
         await updateJob(editId, payload)
 
-        toast.add({
-          title:
-            status === "draft"
-              ? "Draft saved successfully!"
-              : jobStatus === "draft"
-                ? "Job published successfully!"
-                : "Job updated successfully!",
+        // Update local status
+        setJobStatus(status)
 
-          description:
-            status === "draft"
-              ? "Your job has been saved as a draft."
-              : jobStatus === "draft"
-                ? "Your job is now available to job seekers."
-                : "Your changes have been saved.",
-
-          type: "success",
-        })
+        // ------------------------------------
+        // SAVE DRAFT
+        // ------------------------------------
 
         if (status === "draft") {
           setResult("draft")
-        } else if (jobStatus === "draft") {
-          setResult("published")
-        } else {
-          setResult("updated")
+
+          toast.add({
+            title: "Draft saved successfully!",
+            description: "Your job has been saved as a draft.",
+            type: "success",
+          })
+
+          return
         }
 
-        // If a draft was published,
-        // check whether this was the final free slot.
-        if (isNewPublication) {
+        // ------------------------------------
+        // DRAFT -> PUBLISHED
+        // ------------------------------------
+
+        if (wasDraft) {
+          setResult("published")
+
+          toast.add({
+            title: "Job published successfully!",
+            description: "Your job is now available to job seekers.",
+            type: "success",
+          })
+
+          // Billing check happens AFTER publish
           try {
             const billing = await getBillingSummary()
 
             if (
               billing.plan !== "premium" &&
-              billing.publishedJobsUsed >= (billing.publishedJobLimit ?? 5)
+              billing.publishedJobLimit !== null &&
+              billing.publishedJobsUsed >= billing.publishedJobLimit
             ) {
               setShowUpgradeDialog(true)
             }
-          } catch {
-            // Job was already updated successfully.
+          } catch (billingError) {
+            console.error("POST-PUBLISH BILLING CHECK ERROR:", billingError)
           }
+
+          return
         }
-      }
 
-      // --------------------------------
-      // CREATE NEW JOB
-      // --------------------------------
-      else {
-        const createdJob = await createJob(payload)
+        // ------------------------------------
+        // UPDATE ACTIVE JOB
+        // ------------------------------------
 
-        rememberJobOwner(createdJob, currentUser)
+        setResult("updated")
 
         toast.add({
-          title:
-            status === "draft"
-              ? "Draft saved successfully!"
-              : "Job published successfully!",
-
-          description:
-            status === "draft"
-              ? "Your draft has been saved."
-              : "Your job is now available.",
-
+          title: "Job updated successfully!",
+          description: "Your changes have been saved.",
           type: "success",
         })
 
-        setResult(status === "draft" ? "draft" : "published")
-
-        // Check usage after successful publication.
-        if (status === "active") {
-          try {
-            const billing = await getBillingSummary()
-
-            if (
-              billing.plan !== "premium" &&
-              billing.publishedJobsUsed >= (billing.publishedJobLimit ?? 5)
-            ) {
-              setShowUpgradeDialog(true)
-            }
-          } catch {
-            // Job was already created successfully.
-          }
-        }
-      }
-
-      setJobStatus(status)
-    } catch (error) {
-      console.error("SAVE JOB ERROR:", error)
-
-      /*
-       * Backend authoritative limit check.
-       *
-       * jobs-api.ts preserves the HTTP status,
-       * so a 429 means the recruiter has reached
-       * the publishing limit.
-       */
-      if (isJobsApiError(error) && error.status === 429) {
-        setShowUpgradeDialog(true)
         return
       }
 
+      // ======================================
+      // CREATE NEW JOB
+      // ======================================
+
+      const createdJob = await createJob(payload)
+
+      // Save owner information locally
+      rememberJobOwner(createdJob, currentUser)
+
+      setJobStatus(status)
+
+      // --------------------------------------
+      // SAVE NEW DRAFT
+      // --------------------------------------
+
+      if (status === "draft") {
+        setResult("draft")
+
+        toast.add({
+          title: "Draft saved successfully!",
+          description: "Your draft has been saved.",
+          type: "success",
+        })
+
+        return
+      }
+
+      // --------------------------------------
+      // NEW JOB PUBLISHED
+      // --------------------------------------
+
+      setResult("published")
+
+      toast.add({
+        title: "Job published successfully!",
+        description: "Your job is now available to job seekers.",
+        type: "success",
+      })
+
+      // --------------------------------------
+      // CHECK BILLING AFTER SUCCESS
+      // --------------------------------------
+
+      try {
+        const billing = await getBillingSummary()
+
+        if (
+          billing.plan !== "premium" &&
+          billing.publishedJobLimit !== null &&
+          billing.publishedJobsUsed >= billing.publishedJobLimit
+        ) {
+          setShowUpgradeDialog(true)
+        }
+      } catch (billingError) {
+        // Do NOT break successful publishing
+        console.error("POST-CREATE BILLING CHECK ERROR:", billingError)
+      }
+    } catch (error) {
+      console.error("================================")
+      console.error("SAVE JOB ERROR:", error)
+      console.error("================================")
+
+      // ======================================
+      // FREE PLAN LIMIT
+      // ======================================
+
+      if (isJobsApiError(error) && error.status === 429) {
+        setShowUpgradeDialog(true)
+
+        return
+      }
+
+      // ======================================
+      // NORMAL ERROR
+      // ======================================
+
       toast.add({
         title: "Unable to save job",
-        description: getJobsErrorMessage(error),
+        description: getJobsErrorMessage(
+          error,
+          "Unable to publish this job. Please try again."
+        ),
         type: "error",
       })
     } finally {
@@ -749,9 +811,9 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  // --------------------------------
+  // ==========================================
   // SUCCESS SCREEN
-  // --------------------------------
+  // ==========================================
 
   if (result) {
     const isDraft = result === "draft"
@@ -845,9 +907,9 @@ export default function RecruiterNewJobPage() {
     )
   }
 
-  // --------------------------------
+  // ==========================================
   // LOADING
-  // --------------------------------
+  // ==========================================
 
   if (
     sessionPending ||
@@ -879,9 +941,9 @@ export default function RecruiterNewJobPage() {
     )
   }
 
-  // --------------------------------
+  // ==========================================
   // ERROR SCREEN
-  // --------------------------------
+  // ==========================================
 
   if (pageError) {
     return (
@@ -912,9 +974,9 @@ export default function RecruiterNewJobPage() {
     )
   }
 
-  // --------------------------------
+  // ==========================================
   // MAIN FORM
-  // --------------------------------
+  // ==========================================
 
   return (
     <>
@@ -944,13 +1006,20 @@ export default function RecruiterNewJobPage() {
         <form
           onSubmit={(event) => {
             event.preventDefault()
-            void handleSubmit("active")
+
+            if (!submitting) {
+              void handleSubmit("active")
+            }
           }}
           className="grid gap-4 lg:grid-cols-3"
         >
-          {/* LEFT SIDE */}
+          {/* ==================================
+              LEFT SIDE
+          ================================== */}
 
           <div className="space-y-4 lg:col-span-2">
+            {/* JOB INFO */}
+
             <SectionCard
               title="Job info"
               description="The essentials candidates see first."
@@ -1175,7 +1244,9 @@ export default function RecruiterNewJobPage() {
             </SectionCard>
           </div>
 
-          {/* RIGHT SIDEBAR */}
+          {/* ==================================
+              RIGHT SIDEBAR
+          ================================== */}
 
           <div className="space-y-4">
             <DashboardCard className="p-5">
@@ -1195,12 +1266,18 @@ export default function RecruiterNewJobPage() {
                 </li>
               </ul>
 
-              {/* PUBLISH / UPDATE */}
+              {/* ==================================
+                  PUBLISH / UPDATE BUTTON
+              ================================== */}
 
               <button
                 type="submit"
-                disabled={submitting}
-                className={cn(primaryButton, "mt-5 w-full")}
+                disabled={submitting || loadingJob}
+                className={cn(
+                  primaryButton,
+                  "mt-5 w-full",
+                  (submitting || loadingJob) && "cursor-not-allowed opacity-70"
+                )}
               >
                 {submitting ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -1219,12 +1296,18 @@ export default function RecruiterNewJobPage() {
                     : "Publish job"}
               </button>
 
-              {/* SAVE AS DRAFT */}
+              {/* ==================================
+                  SAVE AS DRAFT
+              ================================== */}
 
               <button
                 type="button"
-                disabled={submitting}
-                onClick={() => void handleSubmit("draft")}
+                disabled={submitting || loadingJob}
+                onClick={() => {
+                  if (!submitting) {
+                    void handleSubmit("draft")
+                  }
+                }}
                 className={cn(secondaryButton, "mt-2 w-full")}
               >
                 {submitting ? (
