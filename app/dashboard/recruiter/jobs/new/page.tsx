@@ -21,6 +21,7 @@ import {
   updateJob,
   getJobsErrorMessage,
   getBillingSummary,
+  isJobsApiError,
   type JobUser,
   type JobInput,
 } from "@/app/lib/jobs-api"
@@ -156,10 +157,12 @@ export default function RecruiterNewJobPage() {
   const [form, setForm] = useState<FormData>(initialForm)
   const [remote, setRemote] = useState(false)
   const [result, setResult] = useState<ResultType>(null)
+
   const [editId, setEditId] = useState<string | null>(null)
   const [editModeReady, setEditModeReady] = useState(false)
   const [jobLoaded, setJobLoaded] = useState(false)
   const [loadingJob, setLoadingJob] = useState(false)
+
   const [submitting, setSubmitting] = useState(false)
   const [pageError, setPageError] = useState<string | null>(null)
 
@@ -210,7 +213,9 @@ export default function RecruiterNewJobPage() {
         throw new Error("Your session has expired. Please sign in again.")
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      const API_URL = (
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+      ).replace(/\/+$/, "")
 
       const response = await fetch(
         `${API_URL}/api/billing/create-checkout-session`,
@@ -497,7 +502,9 @@ export default function RecruiterNewJobPage() {
     const formatAmount = (value: string) => {
       const amount = Number(value)
 
-      if (!Number.isFinite(amount) || amount <= 0) return ""
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return ""
+      }
 
       return amount >= 1000 && amount % 1000 === 0
         ? `${symbol}${amount / 1000}k`
@@ -555,6 +562,7 @@ export default function RecruiterNewJobPage() {
     }
 
     const limit = billing.publishedJobLimit ?? 5
+
     const used = billing.publishedJobsUsed ?? 0
 
     return used >= limit
@@ -575,10 +583,9 @@ export default function RecruiterNewJobPage() {
       return
     }
 
-    if (
-      currentUser.role?.toLowerCase() !== "recruiter" &&
-      currentUser.role?.toLowerCase() !== "admin"
-    ) {
+    const role = currentUser.role?.toLowerCase()
+
+    if (role !== "recruiter" && role !== "admin") {
       toast.add({
         title: "Access denied",
         description: "Only recruiters can publish jobs.",
@@ -588,38 +595,45 @@ export default function RecruiterNewJobPage() {
       return
     }
 
+    // Prevent duplicate clicks immediately.
     if (submitting) return
 
     if (!validateForm()) return
 
-    // Check limit only when publishing a new job
-    // or changing an existing draft into an active job.
-    const isNewPublication =
-      status === "active" && (!editId || jobStatus === "draft")
+    /*
+     * Important:
+     * Set submitting BEFORE billing check.
+     * Otherwise user can click the button multiple times
+     * while getBillingSummary() is still running.
+     */
+    setSubmitting(true)
 
-    if (isNewPublication) {
-      try {
+    try {
+      // --------------------------------
+      // CHECK PUBLISH LIMIT
+      // --------------------------------
+
+      const isNewPublication =
+        status === "active" && (!editId || jobStatus === "draft")
+
+      if (isNewPublication) {
         const limitReached = await checkJobLimit()
 
         if (limitReached) {
           setShowUpgradeDialog(true)
           return
         }
-      } catch (error) {
-        toast.add({
-          title: "Unable to verify job limit",
-          description: getJobsErrorMessage(error, "Please try again."),
-          type: "error",
-        })
-
-        return
       }
-    }
 
-    setSubmitting(true)
+      // --------------------------------
+      // BUILD PAYLOAD
+      // --------------------------------
 
-    try {
       const payload = buildPayload(status)
+
+      // --------------------------------
+      // UPDATE EXISTING JOB
+      // --------------------------------
 
       if (editId) {
         await updateJob(editId, payload)
@@ -650,7 +664,8 @@ export default function RecruiterNewJobPage() {
           setResult("updated")
         }
 
-        // If a draft was published, check whether it used the final slot.
+        // If a draft was published,
+        // check whether this was the final free slot.
         if (isNewPublication) {
           try {
             const billing = await getBillingSummary()
@@ -662,10 +677,15 @@ export default function RecruiterNewJobPage() {
               setShowUpgradeDialog(true)
             }
           } catch {
-            // The job was already updated successfully.
+            // Job was already updated successfully.
           }
         }
-      } else {
+      }
+
+      // --------------------------------
+      // CREATE NEW JOB
+      // --------------------------------
+      else {
         const createdJob = await createJob(payload)
 
         rememberJobOwner(createdJob, currentUser)
@@ -698,7 +718,7 @@ export default function RecruiterNewJobPage() {
               setShowUpgradeDialog(true)
             }
           } catch {
-            // The job was already created successfully.
+            // Job was already created successfully.
           }
         }
       }
@@ -706,6 +726,18 @@ export default function RecruiterNewJobPage() {
       setJobStatus(status)
     } catch (error) {
       console.error("SAVE JOB ERROR:", error)
+
+      /*
+       * Backend authoritative limit check.
+       *
+       * jobs-api.ts preserves the HTTP status,
+       * so a 429 means the recruiter has reached
+       * the publishing limit.
+       */
+      if (isJobsApiError(error) && error.status === 429) {
+        setShowUpgradeDialog(true)
+        return
+      }
 
       toast.add({
         title: "Unable to save job",
@@ -723,6 +755,7 @@ export default function RecruiterNewJobPage() {
 
   if (result) {
     const isDraft = result === "draft"
+
     const isUpdated = result === "updated"
 
     return (
@@ -770,6 +803,7 @@ export default function RecruiterNewJobPage() {
 
             <h2 className="mt-4 text-lg font-semibold text-[#ededef]">
               {form.title || "Untitled role"}
+
               {isDraft
                 ? " saved as draft"
                 : isUpdated
@@ -828,7 +862,9 @@ export default function RecruiterNewJobPage() {
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="space-y-4 lg:col-span-2">
             <DashboardCard className="space-y-5 p-5">
-              {Array.from({ length: 7 }).map((_, index) => (
+              {Array.from({
+                length: 7,
+              }).map((_, index) => (
                 <div
                   key={index}
                   className="h-10 animate-pulse rounded bg-white/[0.06]"
@@ -912,6 +948,8 @@ export default function RecruiterNewJobPage() {
           }}
           className="grid gap-4 lg:grid-cols-3"
         >
+          {/* LEFT SIDE */}
+
           <div className="space-y-4 lg:col-span-2">
             <SectionCard
               title="Job info"
@@ -919,6 +957,8 @@ export default function RecruiterNewJobPage() {
               bodyClassName="p-5"
             >
               <div className="space-y-4">
+                {/* JOB TITLE */}
+
                 <div>
                   <FieldLabel htmlFor="job-title">Job title *</FieldLabel>
 
@@ -932,6 +972,8 @@ export default function RecruiterNewJobPage() {
                     className={inputClass}
                   />
                 </div>
+
+                {/* COMPANY */}
 
                 <div>
                   <FieldLabel htmlFor="company-name">Company name *</FieldLabel>
@@ -947,6 +989,8 @@ export default function RecruiterNewJobPage() {
                   />
                 </div>
 
+                {/* CATEGORY */}
+
                 <div>
                   <FieldLabel htmlFor="job-category">Job category</FieldLabel>
 
@@ -957,13 +1001,20 @@ export default function RecruiterNewJobPage() {
                     className={inputClass}
                   >
                     <option>Design</option>
+
                     <option>Engineering</option>
+
                     <option>Product</option>
+
                     <option>Marketing</option>
+
                     <option>Sales</option>
+
                     <option>Operations</option>
                   </select>
                 </div>
+
+                {/* SALARY */}
 
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
@@ -1010,12 +1061,17 @@ export default function RecruiterNewJobPage() {
                       className={inputClass}
                     >
                       <option>USD</option>
+
                       <option>EUR</option>
+
                       <option>GBP</option>
+
                       <option>BDT</option>
                     </select>
                   </div>
                 </div>
+
+                {/* LOCATION */}
 
                 <div>
                   <FieldLabel htmlFor="job-location">Location</FieldLabel>
@@ -1030,6 +1086,8 @@ export default function RecruiterNewJobPage() {
                     className={cn(inputClass, remote && "opacity-60")}
                   />
                 </div>
+
+                {/* REMOTE */}
 
                 <label className="flex w-fit cursor-pointer items-center gap-2 text-xs text-[#a0a0ab]">
                   <input
@@ -1053,12 +1111,16 @@ export default function RecruiterNewJobPage() {
               </div>
             </SectionCard>
 
+            {/* JOB DESCRIPTION */}
+
             <SectionCard
               title="Job description"
               description="Give candidates enough detail to decide if the role is right for them."
               bodyClassName="p-5"
             >
               <div className="space-y-4">
+                {/* RESPONSIBILITIES */}
+
                 <div>
                   <FieldLabel htmlFor="responsibilities">
                     Responsibilities
@@ -1076,6 +1138,8 @@ export default function RecruiterNewJobPage() {
                   />
                 </div>
 
+                {/* REQUIREMENTS */}
+
                 <div>
                   <FieldLabel htmlFor="requirements">Requirements</FieldLabel>
 
@@ -1090,6 +1154,8 @@ export default function RecruiterNewJobPage() {
                     className={cn(inputClass, "resize-none")}
                   />
                 </div>
+
+                {/* BENEFITS */}
 
                 <div>
                   <FieldLabel htmlFor="benefits">
@@ -1143,7 +1209,9 @@ export default function RecruiterNewJobPage() {
                 )}
 
                 {submitting
-                  ? "Saving..."
+                  ? editId
+                    ? "Updating..."
+                    : "Posting..."
                   : editId
                     ? jobStatus === "draft"
                       ? "Publish job"
