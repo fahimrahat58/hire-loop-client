@@ -61,6 +61,7 @@ export default function SeekerApplicationsPage() {
   } = useJobs()
 
   const {
+    applications,
     appliedSet,
     appliedJobIds,
     loading: applicationsLoading,

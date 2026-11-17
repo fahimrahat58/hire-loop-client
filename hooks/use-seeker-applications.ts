@@ -3,23 +3,44 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { authClient } from "@/app/lib/auth-client"
-import {
-  getApplicationsErrorMessage,
-  getAppliedJobIds,
-} from "@/app/lib/applications-api"
+import { getApplicationsErrorMessage } from "@/app/lib/applications-api"
+
 import type { ApiJob } from "@/app/lib/jobs-api"
 
-function isPublishedJob(job: ApiJob) {
-  return job.status?.toLowerCase() !== "draft"
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+).replace(/\/+$/, "")
+
+export type SeekerApplication = {
+  id: string
+  jobId: string
+  jobTitle: string
+  company: string
+  applicantName: string
+  applicantEmail: string
+  experience: string
+  resumeUrl: string
+  coverLetter: string
+  status: string
+  appliedAt: string | Date
+  updatedAt: string | Date
 }
 
-export function useSeekerApplications(jobs: ApiJob[]) {
+type ApplicationResponse = {
+  success: boolean
+  message?: string
+  data: SeekerApplication[]
+  total: number
+}
+
+export function useSeekerApplications(_jobs: ApiJob[]) {
   const { data: session, isPending } = authClient.useSession()
 
   const email = session?.user?.email
   const role = session?.user?.role
 
-  const [appliedJobIds, setAppliedJobIds] = useState<string[]>([])
+  const [applications, setApplications] = useState<SeekerApplication[]>([])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,35 +53,48 @@ export function useSeekerApplications(jobs: ApiJob[]) {
       if (isPending) return
 
       if (!email || role !== "seeker") {
-        setAppliedJobIds([])
+        setApplications([])
         setError(null)
         setLoading(false)
         return
       }
 
-      const jobIds = jobs.filter(isPublishedJob).map((job) => job._id)
-
-      if (jobIds.length === 0) {
-        setAppliedJobIds([])
-        setError(null)
-        setLoading(false)
-        return
+      if (!options?.silent) {
+        setLoading(true)
       }
-
-      if (!options?.silent) setLoading(true)
 
       setError(null)
 
       try {
-        const applied = await getAppliedJobIds(
-          jobIds,
-          email,
-          options?.signal
+        const { data: tokenData, error: tokenError } = await authClient.token()
+
+        if (tokenError || !tokenData?.token) {
+          throw new Error("Authentication token not available.")
+        }
+
+        const response = await fetch(
+          `${API_URL}/api/applications/my-applications`,
+          {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              Authorization: `Bearer ${tokenData.token}`,
+            },
+            credentials: "include",
+            cache: "no-store",
+            signal: options?.signal,
+          }
         )
+
+        const result = (await response.json()) as ApplicationResponse
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || "Failed to load applications.")
+        }
 
         if (requestId !== requestRef.current) return
 
-        setAppliedJobIds(applied)
+        setApplications(Array.isArray(result.data) ? result.data : [])
       } catch (requestError) {
         if (
           requestError instanceof DOMException &&
@@ -78,7 +112,7 @@ export function useSeekerApplications(jobs: ApiJob[]) {
         }
       }
     },
-    [email, role, isPending, jobs]
+    [email, role, isPending]
   )
 
   useEffect(() => {
@@ -88,15 +122,22 @@ export function useSeekerApplications(jobs: ApiJob[]) {
 
     void load({ signal: controller.signal })
 
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+    }
   }, [isPending, load])
 
-  const appliedSet = useMemo(
-    () => new Set(appliedJobIds),
-    [appliedJobIds]
+  // Application Job IDs
+  const appliedJobIds = useMemo(
+    () => applications.map((application) => application.jobId),
+    [applications]
   )
 
+  // Existing page compatibility
+  const appliedSet = useMemo(() => new Set(appliedJobIds), [appliedJobIds])
+
   return {
+    applications,
     appliedJobIds,
     appliedSet,
     loading: loading || isPending,
