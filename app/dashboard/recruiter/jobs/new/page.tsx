@@ -1,8 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type FormEvent,
+} from "react"
+
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+
 import {
   ArrowLeft,
   BriefcaseBusiness,
@@ -25,22 +34,68 @@ import {
   isJobsApiError,
   type JobUser,
   type JobInput,
+  type ApiJob,
 } from "@/app/lib/jobs-api"
 
-import { rememberJobOwner } from "@/app/lib/job-owner"
-
-import {
-  DashboardCard,
-  FieldLabel,
-  PageHeader,
-  SectionCard,
-  inputClass,
-  primaryButton,
-  secondaryButton,
-} from "@/app/components/dashboard"
+import { rememberJobOwner } from "@/app/lib/job-ownership"
 
 import { toast } from "sonner"
-import { cn } from "@/app/lib/utils"
+
+const cn = (...classes: (string | false | null | undefined)[]) =>
+  classes.filter(Boolean).join(" ")
+
+const inputClass =
+  "w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-[#ccff00]/40 disabled:cursor-not-allowed disabled:opacity-50"
+
+const primaryButton =
+  "rounded-xl bg-[#ccff00] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:cursor-not-allowed disabled:opacity-60"
+
+const secondaryButton =
+  "rounded-xl border border-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/5"
+
+function DashboardCard({ children }: { children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#151515] p-5">
+      {children}
+    </section>
+  )
+}
+
+function SectionCard({ children }: { children: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#151515] p-6">
+      {children}
+    </section>
+  )
+}
+
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <label className="mb-2 block text-sm font-medium text-white/80">
+      {children}
+    </label>
+  )
+}
+
+function PageHeader({
+  title,
+  description,
+  action,
+}: {
+  title: string
+  description: string
+  action?: ReactNode
+}) {
+  return (
+    <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 className="text-3xl font-semibold text-white">{title}</h1>
+        <p className="mt-2 text-sm text-white/50">{description}</p>
+      </div>
+      {action}
+    </header>
+  )
+}
 
 type ResultType = "published" | "draft" | "updated" | null
 
@@ -93,6 +148,7 @@ function UpgradeDialog({
         <button
           type="button"
           onClick={onClose}
+          disabled={upgrading}
           className="absolute top-4 right-4 rounded-lg p-2 text-white/50 transition hover:bg-white/5 hover:text-white"
           aria-label="Close"
         >
@@ -131,7 +187,7 @@ function UpgradeDialog({
             type="button"
             onClick={onClose}
             disabled={upgrading}
-            className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/5 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -140,7 +196,7 @@ function UpgradeDialog({
             type="button"
             onClick={onUpgrade}
             disabled={upgrading}
-            className="flex-1 rounded-xl bg-[#ccff00] px-4 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex-1 rounded-xl bg-[#ccff00] px-4 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:opacity-60"
           >
             {upgrading ? (
               <span className="flex items-center justify-center gap-2">
@@ -171,14 +227,13 @@ export default function RecruiterNewJobPage() {
 
   const [result, setResult] = useState<ResultType>(null)
 
-  const [editModeReady, setEditModeReady] = useState(!editId)
-  const [jobLoaded, setJobLoaded] = useState(false)
   const [loadingJob, setLoadingJob] = useState(Boolean(editId))
 
   const [submitting, setSubmitting] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
 
   const [pageError, setPageError] = useState("")
+
   const [jobStatus, setJobStatus] = useState<"active" | "draft">("active")
 
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
@@ -191,6 +246,7 @@ export default function RecruiterNewJobPage() {
     role: session?.user?.role ?? session?.user?.userType ?? null,
   }
 
+  // Load authenticated user
   const loadSession = useCallback(async () => {
     try {
       setSessionLoading(true)
@@ -214,9 +270,9 @@ export default function RecruiterNewJobPage() {
     loadSession()
   }, [loadSession])
 
+  // Load existing job for editing
   const loadExistingJob = useCallback(async () => {
     if (!editId) {
-      setEditModeReady(true)
       setLoadingJob(false)
       return
     }
@@ -226,7 +282,6 @@ export default function RecruiterNewJobPage() {
     if (!currentUser.id && !currentUser.email) {
       setPageError("You must be logged in to edit a job.")
       setLoadingJob(false)
-      setEditModeReady(true)
       return
     }
 
@@ -251,11 +306,11 @@ export default function RecruiterNewJobPage() {
 
       const ownsJob =
         isAdmin ||
-        (currentUser.id &&
-          jobOwnerId &&
+        (!!currentUser.id &&
+          !!jobOwnerId &&
           String(currentUser.id) === String(jobOwnerId)) ||
-        (currentUser.email &&
-          jobOwnerEmail &&
+        (!!currentUser.email &&
+          !!jobOwnerEmail &&
           currentUser.email.toLowerCase() ===
             String(jobOwnerEmail).toLowerCase())
 
@@ -263,10 +318,8 @@ export default function RecruiterNewJobPage() {
         throw new Error("You are not allowed to edit this job.")
       }
 
-      rememberJobOwner(editId, {
-        id: jobOwnerId ? String(jobOwnerId) : currentUser.id || undefined,
-        email: jobOwnerEmail || currentUser.email || undefined,
-      })
+      // FIX: rememberJobOwner expects ApiJob, not a string ID.
+      rememberJobOwner(job, currentUser)
 
       const status =
         String(job.status || "").toLowerCase() === "draft" ? "draft" : "active"
@@ -318,17 +371,12 @@ export default function RecruiterNewJobPage() {
         requirements: getSection("Requirements"),
         benefits: getSection("Benefits"),
       })
-
-      setJobLoaded(true)
-      setEditModeReady(true)
     } catch (error) {
       console.error("Load job error:", error)
 
       setPageError(
         getJobsErrorMessage(error, "Unable to load this job. Please try again.")
       )
-
-      setEditModeReady(true)
     } finally {
       setLoadingJob(false)
     }
@@ -344,6 +392,7 @@ export default function RecruiterNewJobPage() {
     loadExistingJob()
   }, [loadExistingJob])
 
+  // Form change
   const handleChange = (field: keyof FormState, value: string) => {
     setForm((prev) => ({
       ...prev,
@@ -353,6 +402,7 @@ export default function RecruiterNewJobPage() {
     setPageError("")
   }
 
+  // Form validation
   const validateForm = () => {
     if (!form.title.trim()) {
       return "Please enter a job title."
@@ -385,13 +435,12 @@ export default function RecruiterNewJobPage() {
     return null
   }
 
+  // Build salary
   const buildSalary = () => {
     const min = form.salaryMin.trim()
     const max = form.salaryMax.trim()
 
-    if (!min && !max) {
-      return ""
-    }
+    if (!min && !max) return ""
 
     const symbolMap: Record<string, string> = {
       USD: "$",
@@ -402,17 +451,14 @@ export default function RecruiterNewJobPage() {
 
     const symbol = symbolMap[form.currency] || form.currency
 
-    if (min && max) {
-      return `${symbol}${min}k - ${symbol}${max}k`
-    }
+    if (min && max) return `${symbol}${min}k - ${symbol}${max}k`
 
-    if (min) {
-      return `${symbol}${min}k+`
-    }
+    if (min) return `${symbol}${min}k+`
 
     return `Up to ${symbol}${max}k`
   }
 
+  // Build description
   const buildDescription = () => {
     const sections: string[] = []
 
@@ -431,19 +477,19 @@ export default function RecruiterNewJobPage() {
     return sections.join("\n\n")
   }
 
-  const buildPayload = (status: "active" | "draft"): JobInput => {
-    return {
-      title: form.title.trim(),
-      company: form.company.trim(),
-      category: form.category,
-      location: remote ? "Remote" : form.location.trim(),
-      salary: buildSalary(),
-      description: buildDescription(),
-      status,
-      closed: status === "draft",
-    }
-  }
+  // Build API payload
+  const buildPayload = (status: "active" | "draft"): JobInput => ({
+    title: form.title.trim(),
+    company: form.company.trim(),
+    category: form.category,
+    location: remote ? "Remote" : form.location.trim(),
+    salary: buildSalary(),
+    description: buildDescription(),
+    status,
+    closed: status === "draft",
+  })
 
+  // Premium upgrade
   const handleUpgrade = async () => {
     try {
       setUpgrading(true)
@@ -495,7 +541,8 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  // Submit job
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
     if (submitting) return
@@ -512,6 +559,7 @@ export default function RecruiterNewJobPage() {
 
     if (!currentUser.id && !currentUser.email) {
       const message = "Please log in before publishing a job."
+
       setPageError(message)
       toast.error(message)
       return
@@ -524,14 +572,13 @@ export default function RecruiterNewJobPage() {
 
     setSubmitting(true)
 
-    const isPublishing = jobStatus === "draft" || !editId
-
     const targetStatus = jobStatus
+    const isPublishing = targetStatus === "active"
 
     try {
       const payload = buildPayload(targetStatus)
 
-      let savedJob
+      let savedJob: ApiJob
 
       if (editId) {
         savedJob = await updateJob(editId, payload, {
@@ -543,17 +590,9 @@ export default function RecruiterNewJobPage() {
         })
       }
 
+      // FIX: pass the complete ApiJob object.
       if (savedJob?._id) {
-        rememberJobOwner(savedJob._id, {
-          id:
-            savedJob.recruiterId ||
-            savedJob.createdBy ||
-            savedJob.ownerId ||
-            savedJob.userId ||
-            currentUser.id ||
-            undefined,
-          email: savedJob.ownerEmail || currentUser.email || undefined,
-        })
+        rememberJobOwner(savedJob, currentUser)
       }
 
       if (targetStatus === "draft") {
@@ -569,43 +608,21 @@ export default function RecruiterNewJobPage() {
 
       setResult(editId ? "updated" : "published")
 
-      toast.success(
-        editId ? "Job published successfully!" : "Job published successfully!"
-      )
+      toast.success("Job published successfully!")
 
-      /*
-       * IMPORTANT:
-       * Backend is the source of truth for the 5-job limit.
-       * We don't check billing before publishing because that
-       * can block the actual POST /api/jobs request.
-       */
-
+      // Backend is the source of truth for the 5-job limit.
       try {
         await getBillingSummary({
           signal: controller.signal,
         })
       } catch (billingError) {
-        // Publishing already succeeded, so billing-summary failure
-        // must not make the user think the job failed.
         console.warn(
           "Billing summary refresh failed after publishing:",
           billingError
         )
       }
 
-      /*
-       * Refresh the current Next.js route after successful publish.
-       * This updates server/client data without a full browser reload.
-       */
       router.refresh()
-
-      /*
-       * Small delay gives the success state/toast time to render
-       * before navigating/reloading the current route.
-       */
-      setTimeout(() => {
-        router.refresh()
-      }, 300)
     } catch (error) {
       console.error("Job submit error:", error)
 
@@ -613,10 +630,6 @@ export default function RecruiterNewJobPage() {
         return
       }
 
-      /*
-       * Backend should return 429 when the recruiter has reached
-       * the free-plan active-job limit.
-       */
       if (isJobsApiError(error) && error.status === 429) {
         setShowUpgradeDialog(true)
         return
@@ -632,11 +645,15 @@ export default function RecruiterNewJobPage() {
       setPageError(message)
       toast.error(message)
     } finally {
-      activeRequestRef.current = null
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null
+      }
+
       setSubmitting(false)
     }
   }
 
+  // Loading state
   if (sessionLoading || loadingJob) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -648,6 +665,7 @@ export default function RecruiterNewJobPage() {
     )
   }
 
+  // Success state
   if (result) {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
@@ -667,7 +685,7 @@ export default function RecruiterNewJobPage() {
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/60">
             {result === "draft"
               ? "Your job has been saved as a draft. You can publish it later."
-              : "Your job has been published successfully and the route has been refreshed."}
+              : "Your job has been published successfully."}
           </p>
 
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
@@ -978,13 +996,11 @@ export default function RecruiterNewJobPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-
                     {jobStatus === "draft" ? "Saving..." : "Publishing..."}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-
                     {jobStatus === "draft"
                       ? "Save Draft"
                       : editId
