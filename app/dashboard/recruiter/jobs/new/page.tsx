@@ -91,12 +91,11 @@ function PageHeader({
         <h1 className="text-3xl font-semibold text-white">{title}</h1>
         <p className="mt-2 text-sm text-white/50">{description}</p>
       </div>
+
       {action}
     </header>
   )
 }
-
-type ResultType = "published" | "draft" | "updated" | null
 
 type FormState = {
   title: string
@@ -127,6 +126,10 @@ const initialForm: FormState = {
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
 ).replace(/\/+$/, "")
+
+// --------------------------------------------------
+// Upgrade Dialog
+// --------------------------------------------------
 
 function UpgradeDialog({
   open,
@@ -212,6 +215,10 @@ function UpgradeDialog({
   )
 }
 
+// --------------------------------------------------
+// Main Page
+// --------------------------------------------------
+
 export default function RecruiterNewJobPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -223,8 +230,6 @@ export default function RecruiterNewJobPage() {
 
   const [form, setForm] = useState<FormState>(initialForm)
   const [remote, setRemote] = useState(false)
-
-  const [result, setResult] = useState<ResultType>(null)
 
   const [loadingJob, setLoadingJob] = useState(Boolean(editId))
 
@@ -245,7 +250,10 @@ export default function RecruiterNewJobPage() {
     role: session?.user?.role ?? session?.user?.userType ?? null,
   }
 
-  // Load authenticated user
+  // --------------------------------------------------
+  // Load Session
+  // --------------------------------------------------
+
   const loadSession = useCallback(async () => {
     try {
       setSessionLoading(true)
@@ -269,7 +277,10 @@ export default function RecruiterNewJobPage() {
     loadSession()
   }, [loadSession])
 
-  // Load existing job for editing
+  // --------------------------------------------------
+  // Load Existing Job
+  // --------------------------------------------------
+
   const loadExistingJob = useCallback(async () => {
     if (!editId) {
       setLoadingJob(false)
@@ -317,7 +328,6 @@ export default function RecruiterNewJobPage() {
         throw new Error("You are not allowed to edit this job.")
       }
 
-      // FIX: rememberJobOwner expects ApiJob, not a string ID.
       rememberJobOwner(job, currentUser)
 
       const status =
@@ -391,7 +401,10 @@ export default function RecruiterNewJobPage() {
     loadExistingJob()
   }, [loadExistingJob])
 
-  // Form change
+  // --------------------------------------------------
+  // Form Change
+  // --------------------------------------------------
+
   const handleChange = (field: keyof FormState, value: string) => {
     setForm((prev) => ({
       ...prev,
@@ -401,7 +414,10 @@ export default function RecruiterNewJobPage() {
     setPageError("")
   }
 
-  // Form validation
+  // --------------------------------------------------
+  // Form Validation
+  // --------------------------------------------------
+
   const validateForm = () => {
     if (!form.title.trim()) {
       return "Please enter a job title."
@@ -415,12 +431,18 @@ export default function RecruiterNewJobPage() {
       return "Please enter a location or enable Remote."
     }
 
-    if (form.salaryMin.trim() && Number.isNaN(Number(form.salaryMin))) {
-      return "Minimum salary must be a valid number."
+    if (
+      form.salaryMin.trim() &&
+      (Number.isNaN(Number(form.salaryMin)) || Number(form.salaryMin) < 0)
+    ) {
+      return "Minimum salary must be a valid positive number."
     }
 
-    if (form.salaryMax.trim() && Number.isNaN(Number(form.salaryMax))) {
-      return "Maximum salary must be a valid number."
+    if (
+      form.salaryMax.trim() &&
+      (Number.isNaN(Number(form.salaryMax)) || Number(form.salaryMax) < 0)
+    ) {
+      return "Maximum salary must be a valid positive number."
     }
 
     if (
@@ -434,7 +456,10 @@ export default function RecruiterNewJobPage() {
     return null
   }
 
-  // Build salary
+  // --------------------------------------------------
+  // Build Salary
+  // --------------------------------------------------
+
   const buildSalary = () => {
     const min = form.salaryMin.trim()
     const max = form.salaryMax.trim()
@@ -457,7 +482,10 @@ export default function RecruiterNewJobPage() {
     return `Up to ${symbol}${max}k`
   }
 
-  // Build description
+  // --------------------------------------------------
+  // Build Description
+  // --------------------------------------------------
+
   const buildDescription = () => {
     const sections: string[] = []
 
@@ -476,7 +504,10 @@ export default function RecruiterNewJobPage() {
     return sections.join("\n\n")
   }
 
-  // Build API payload
+  // --------------------------------------------------
+  // Build API Payload
+  // --------------------------------------------------
+
   const buildPayload = (status: "active" | "draft"): JobInput => ({
     title: form.title.trim(),
     company: form.company.trim(),
@@ -488,7 +519,10 @@ export default function RecruiterNewJobPage() {
     closed: status === "draft",
   })
 
-  // Premium upgrade
+  // --------------------------------------------------
+  // Premium Upgrade
+  // --------------------------------------------------
+
   const handleUpgrade = async () => {
     try {
       setUpgrading(true)
@@ -540,7 +574,19 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  // Submit job
+  // --------------------------------------------------
+  // Navigate After Successful Job Save
+  // --------------------------------------------------
+
+  const goToJobs = () => {
+    router.push("/dashboard/recruiter/jobs")
+    router.refresh()
+  }
+
+  // --------------------------------------------------
+  // Submit Job
+  // --------------------------------------------------
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -589,27 +635,26 @@ export default function RecruiterNewJobPage() {
         })
       }
 
-      // FIX: pass the complete ApiJob object.
       if (savedJob?._id) {
         rememberJobOwner(savedJob, currentUser)
       }
 
+      // Draft successfully saved
       if (targetStatus === "draft") {
-        setResult("draft")
-
         toast.success(
           editId ? "Job draft updated successfully." : "Job saved as draft."
         )
 
-        router.refresh()
+        goToJobs()
         return
       }
 
-      setResult(editId ? "updated" : "published")
+      // Published successfully
+      toast.success(
+        editId ? "Job updated successfully!" : "Job published successfully!"
+      )
 
-      toast.success("Job published successfully!")
-
-      // Backend is the source of truth for the 5-job limit.
+      // Refresh billing summary after publishing
       try {
         await getBillingSummary({
           signal: controller.signal,
@@ -621,7 +666,8 @@ export default function RecruiterNewJobPage() {
         )
       }
 
-      router.refresh()
+      // Redirect to recruiter jobs page
+      goToJobs()
     } catch (error) {
       console.error("Job submit error:", error)
 
@@ -629,6 +675,7 @@ export default function RecruiterNewJobPage() {
         return
       }
 
+      // Free plan limit reached
       if (isJobsApiError(error) && error.status === 429) {
         setShowUpgradeDialog(true)
         return
@@ -652,7 +699,10 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  // Loading state
+  // --------------------------------------------------
+  // Loading State
+  // --------------------------------------------------
+
   if (sessionLoading || loadingJob) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -664,63 +714,9 @@ export default function RecruiterNewJobPage() {
     )
   }
 
-  // Success state
-  if (result) {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="rounded-2xl border border-white/10 bg-[#151515] p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ccff00]/10">
-            <CheckCircle2 className="h-8 w-8 text-[#ccff00]" />
-          </div>
-
-          <h1 className="mt-5 text-2xl font-semibold text-white">
-            {result === "draft"
-              ? "Job Saved as Draft"
-              : result === "updated"
-                ? "Job Published Successfully"
-                : "Job Published Successfully"}
-          </h1>
-
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/60">
-            {result === "draft"
-              ? "Your job has been saved as a draft. You can publish it later."
-              : "Your job has been published successfully."}
-          </p>
-
-          <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link
-              href="/recruiter/jobs"
-              className={cn(
-                primaryButton,
-                "inline-flex items-center justify-center"
-              )}
-            >
-              View My Jobs
-            </Link>
-
-            <button
-              type="button"
-              onClick={() => {
-                setResult(null)
-
-                if (!editId) {
-                  setForm(initialForm)
-                  setRemote(false)
-                  setJobStatus("active")
-                }
-              }}
-              className={cn(
-                secondaryButton,
-                "inline-flex items-center justify-center"
-              )}
-            >
-              {result === "draft" ? "Continue Editing" : "Post Another Job"}
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  // --------------------------------------------------
+  // Main UI
+  // --------------------------------------------------
 
   return (
     <>
@@ -741,7 +737,7 @@ export default function RecruiterNewJobPage() {
           }
           action={
             <Link
-              href="/recruiter/jobs"
+              href="/dashboard/recruiter/jobs"
               className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-white"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -774,6 +770,8 @@ export default function RecruiterNewJobPage() {
           className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
         >
           <div className="space-y-6">
+            {/* Job Information */}
+
             <SectionCard>
               <div className="mb-6 flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ccff00]/10">
@@ -916,6 +914,8 @@ export default function RecruiterNewJobPage() {
               </div>
             </SectionCard>
 
+            {/* Job Description */}
+
             <SectionCard>
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-white">
@@ -973,9 +973,11 @@ export default function RecruiterNewJobPage() {
               </div>
             </SectionCard>
 
+            {/* Submit Buttons */}
+
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Link
-                href="/recruiter/jobs"
+                href="/dashboard/recruiter/jobs"
                 className={cn(
                   secondaryButton,
                   "inline-flex items-center justify-center"
@@ -995,11 +997,13 @@ export default function RecruiterNewJobPage() {
                 {submitting ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
+
                     {jobStatus === "draft" ? "Saving..." : "Publishing..."}
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
+
                     {jobStatus === "draft"
                       ? "Save Draft"
                       : editId
@@ -1010,6 +1014,8 @@ export default function RecruiterNewJobPage() {
               </button>
             </div>
           </div>
+
+          {/* Sidebar */}
 
           <div className="space-y-6">
             <DashboardCard>
