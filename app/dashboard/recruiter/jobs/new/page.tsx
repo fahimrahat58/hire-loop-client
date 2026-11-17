@@ -15,7 +15,6 @@ import {
 } from "lucide-react"
 
 import { authClient } from "@/app/lib/auth-client"
-import { rememberJobOwner } from "@/app/lib/job-ownership"
 
 import {
   getJob,
@@ -31,11 +30,14 @@ import {
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
+const BLUE = "#3B82F6"
+const BLUE_HOVER = "#2563EB"
+
 const inputClass =
-  "w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-[#ccff00]/40 disabled:cursor-not-allowed disabled:opacity-50"
+  "w-full rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-[#3B82F6]/50 disabled:cursor-not-allowed disabled:opacity-50"
 
 const primaryButton =
-  "rounded-xl bg-[#ccff00] px-5 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:cursor-not-allowed disabled:opacity-60"
+  "rounded-xl bg-[#3B82F6] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#2563EB] disabled:cursor-not-allowed disabled:opacity-60"
 
 const secondaryButton =
   "rounded-xl border border-white/10 px-5 py-3 text-sm font-medium text-white transition hover:bg-white/5"
@@ -112,25 +114,19 @@ const initialForm: FormState = {
   benefits: "",
 }
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-).replace(/\/+$/, "")
-
 function UpgradeDialog({
   open,
   onClose,
-  upgrading,
   onUpgrade,
 }: {
   open: boolean
   onClose: () => void
-  upgrading: boolean
   onUpgrade: () => void
 }) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div className="relative w-full max-w-md rounded-2xl border border-white/10 bg-[#151515] p-6 shadow-2xl">
         <button
           type="button"
@@ -141,8 +137,8 @@ function UpgradeDialog({
           <X className="h-5 w-5" />
         </button>
 
-        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-[#ccff00]/10">
-          <Sparkles className="h-6 w-6 text-[#ccff00]" />
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-blue-500/10">
+          <Sparkles className="h-6 w-6 text-blue-400" />
         </div>
 
         <h2 className="text-xl font-semibold text-white">
@@ -162,7 +158,7 @@ function UpgradeDialog({
 
           <div className="mt-3 flex items-center justify-between">
             <span className="text-sm text-white/60">Premium</span>
-            <span className="text-sm font-medium text-[#ccff00]">
+            <span className="text-sm font-medium text-blue-400">
               More job postings
             </span>
           </div>
@@ -172,8 +168,7 @@ function UpgradeDialog({
           <button
             type="button"
             onClick={onClose}
-            disabled={upgrading}
-            className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white transition hover:bg-white/5"
           >
             Cancel
           </button>
@@ -181,17 +176,9 @@ function UpgradeDialog({
           <button
             type="button"
             onClick={onUpgrade}
-            disabled={upgrading}
-            className="flex-1 rounded-xl bg-[#ccff00] px-4 py-3 text-sm font-semibold text-black transition hover:bg-[#d7ff33] disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex-1 rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-600"
           >
-            {upgrading ? (
-              <span className="flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Redirecting...
-              </span>
-            ) : (
-              "Upgrade to Premium"
-            )}
+            Upgrade to Premium
           </button>
         </div>
       </div>
@@ -213,12 +200,8 @@ export default function RecruiterNewJobPage() {
 
   const [result, setResult] = useState<ResultType>(null)
 
-  const [editModeReady, setEditModeReady] = useState(!editId)
-  const [jobLoaded, setJobLoaded] = useState(false)
   const [loadingJob, setLoadingJob] = useState(Boolean(editId))
-
   const [submitting, setSubmitting] = useState(false)
-  const [upgrading, setUpgrading] = useState(false)
 
   const [pageError, setPageError] = useState("")
   const [jobStatus, setJobStatus] = useState<"active" | "draft">("active")
@@ -233,6 +216,7 @@ export default function RecruiterNewJobPage() {
     role: session?.user?.role ?? session?.user?.userType ?? null,
   }
 
+  // Load authenticated user
   const loadSession = useCallback(async () => {
     try {
       setSessionLoading(true)
@@ -256,9 +240,9 @@ export default function RecruiterNewJobPage() {
     loadSession()
   }, [loadSession])
 
+  // Load existing job for editing
   const loadExistingJob = useCallback(async () => {
     if (!editId) {
-      setEditModeReady(true)
       setLoadingJob(false)
       return
     }
@@ -268,7 +252,6 @@ export default function RecruiterNewJobPage() {
     if (!currentUser.id && !currentUser.email) {
       setPageError("You must be logged in to edit a job.")
       setLoadingJob(false)
-      setEditModeReady(true)
       return
     }
 
@@ -293,22 +276,21 @@ export default function RecruiterNewJobPage() {
 
       const ownsJob =
         isAdmin ||
-        (currentUser.id &&
+        Boolean(
+          currentUser.id &&
           jobOwnerId &&
-          String(currentUser.id) === String(jobOwnerId)) ||
-        (currentUser.email &&
+          String(currentUser.id) === String(jobOwnerId)
+        ) ||
+        Boolean(
+          currentUser.email &&
           jobOwnerEmail &&
           currentUser.email.toLowerCase() ===
-            String(jobOwnerEmail).toLowerCase())
+            String(jobOwnerEmail).toLowerCase()
+        )
 
       if (!ownsJob) {
         throw new Error("You are not allowed to edit this job.")
       }
-
-      rememberJobOwner(editId, {
-        id: jobOwnerId ? String(jobOwnerId) : currentUser.id || undefined,
-        email: jobOwnerEmail || currentUser.email || undefined,
-      })
 
       const status =
         String(job.status || "").toLowerCase() === "draft" ? "draft" : "active"
@@ -360,17 +342,12 @@ export default function RecruiterNewJobPage() {
         requirements: getSection("Requirements"),
         benefits: getSection("Benefits"),
       })
-
-      setJobLoaded(true)
-      setEditModeReady(true)
     } catch (error) {
       console.error("Load job error:", error)
 
       setPageError(
         getJobsErrorMessage(error, "Unable to load this job. Please try again.")
       )
-
-      setEditModeReady(true)
     } finally {
       setLoadingJob(false)
     }
@@ -395,6 +372,7 @@ export default function RecruiterNewJobPage() {
     setPageError("")
   }
 
+  // Form validation
   const validateForm = () => {
     if (!form.title.trim()) {
       return "Please enter a job title."
@@ -427,13 +405,12 @@ export default function RecruiterNewJobPage() {
     return null
   }
 
+  // Build salary
   const buildSalary = () => {
     const min = form.salaryMin.trim()
     const max = form.salaryMax.trim()
 
-    if (!min && !max) {
-      return ""
-    }
+    if (!min && !max) return ""
 
     const symbolMap: Record<string, string> = {
       USD: "$",
@@ -455,6 +432,7 @@ export default function RecruiterNewJobPage() {
     return `Up to ${symbol}${max}k`
   }
 
+  // Build description
   const buildDescription = () => {
     const sections: string[] = []
 
@@ -473,6 +451,7 @@ export default function RecruiterNewJobPage() {
     return sections.join("\n\n")
   }
 
+  // Build API payload
   const buildPayload = (status: "active" | "draft"): JobInput => {
     return {
       title: form.title.trim(),
@@ -486,57 +465,13 @@ export default function RecruiterNewJobPage() {
     }
   }
 
-  const handleUpgrade = async () => {
-    try {
-      setUpgrading(true)
-
-      const { data, error } = await authClient.token()
-
-      if (error || !data?.token) {
-        throw new Error("Unable to authenticate your account.")
-      }
-
-      const response = await fetch(
-        `${API_URL}/api/billing/create-checkout-session`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${data.token}`,
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            plan: "premium",
-          }),
-        }
-      )
-
-      const body = await response.json().catch(() => null)
-
-      if (!response.ok) {
-        throw new Error(
-          body?.message || "Unable to create the checkout session."
-        )
-      }
-
-      if (!body?.url) {
-        throw new Error("Checkout URL was not returned.")
-      }
-
-      window.location.href = body.url
-    } catch (error) {
-      console.error("Upgrade error:", error)
-
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "Unable to start the upgrade process."
-      )
-
-      setUpgrading(false)
-    }
+  // Navigate to billing page
+  const handleUpgrade = () => {
+    setShowUpgradeDialog(false)
+    router.push("/dashboard/recruiter/billing")
   }
 
+  // Submit job
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
@@ -566,35 +501,19 @@ export default function RecruiterNewJobPage() {
 
     setSubmitting(true)
 
-    const isPublishing = jobStatus === "draft" || !editId
-
     const targetStatus = jobStatus
+    const isPublishing = jobStatus === "active"
 
     try {
       const payload = buildPayload(targetStatus)
 
-      let savedJob
-
       if (editId) {
-        savedJob = await updateJob(editId, payload, {
+        await updateJob(editId, payload, {
           signal: controller.signal,
         })
       } else {
-        savedJob = await createJob(payload, {
+        await createJob(payload, {
           signal: controller.signal,
-        })
-      }
-
-      if (savedJob?._id) {
-        rememberJobOwner(savedJob._id, {
-          id:
-            savedJob.recruiterId ||
-            savedJob.createdBy ||
-            savedJob.ownerId ||
-            savedJob.userId ||
-            currentUser.id ||
-            undefined,
-          email: savedJob.ownerEmail || currentUser.email || undefined,
         })
       }
 
@@ -612,42 +531,22 @@ export default function RecruiterNewJobPage() {
       setResult(editId ? "updated" : "published")
 
       toast.success(
-        editId ? "Job published successfully!" : "Job published successfully!"
+        editId ? "Job updated successfully!" : "Job published successfully!"
       )
 
-      /*
-       * IMPORTANT:
-       * Backend is the source of truth for the 5-job limit.
-       * We don't check billing before publishing because that
-       * can block the actual POST /api/jobs request.
-       */
-
+      // Refresh billing information after successful publishing
       try {
         await getBillingSummary({
           signal: controller.signal,
         })
       } catch (billingError) {
-        // Publishing already succeeded, so billing-summary failure
-        // must not make the user think the job failed.
         console.warn(
           "Billing summary refresh failed after publishing:",
           billingError
         )
       }
 
-      /*
-       * Refresh the current Next.js route after successful publish.
-       * This updates server/client data without a full browser reload.
-       */
       router.refresh()
-
-      /*
-       * Small delay gives the success state/toast time to render
-       * before navigating/reloading the current route.
-       */
-      setTimeout(() => {
-        router.refresh()
-      }, 300)
     } catch (error) {
       console.error("Job submit error:", error)
 
@@ -655,10 +554,7 @@ export default function RecruiterNewJobPage() {
         return
       }
 
-      /*
-       * Backend should return 429 when the recruiter has reached
-       * the free-plan active-job limit.
-       */
+      // Show upgrade dialog when free plan limit is reached
       if (isJobsApiError(error) && error.status === 429) {
         setShowUpgradeDialog(true)
         return
@@ -674,47 +570,52 @@ export default function RecruiterNewJobPage() {
       setPageError(message)
       toast.error(message)
     } finally {
-      activeRequestRef.current = null
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null
+      }
+
       setSubmitting(false)
     }
   }
 
+  // Loading screen
   if (sessionLoading || loadingJob) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="flex items-center gap-3 text-white/60">
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
           <span>Loading...</span>
         </div>
       </div>
     )
   }
 
+  // Success screen
   if (result) {
     return (
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
         <div className="rounded-2xl border border-white/10 bg-[#151515] p-8 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#ccff00]/10">
-            <CheckCircle2 className="h-8 w-8 text-[#ccff00]" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
+            <CheckCircle2 className="h-8 w-8 text-blue-400" />
           </div>
 
           <h1 className="mt-5 text-2xl font-semibold text-white">
             {result === "draft"
               ? "Job Saved as Draft"
               : result === "updated"
-                ? "Job Published Successfully"
+                ? "Job Updated Successfully"
                 : "Job Published Successfully"}
           </h1>
 
           <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-white/60">
             {result === "draft"
               ? "Your job has been saved as a draft. You can publish it later."
-              : "Your job has been published successfully and the route has been refreshed."}
+              : "Your job has been published successfully."}
           </p>
 
           <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
-              href="/recruiter/jobs"
+              href="/dashboard/recruiter/jobs"
               className={cn(
                 primaryButton,
                 "inline-flex items-center justify-center"
@@ -732,6 +633,7 @@ export default function RecruiterNewJobPage() {
                   setForm(initialForm)
                   setRemote(false)
                   setJobStatus("active")
+                  setPageError("")
                 }
               }}
               className={cn(
@@ -752,7 +654,6 @@ export default function RecruiterNewJobPage() {
       <UpgradeDialog
         open={showUpgradeDialog}
         onClose={() => setShowUpgradeDialog(false)}
-        upgrading={upgrading}
         onUpgrade={handleUpgrade}
       />
 
@@ -766,8 +667,8 @@ export default function RecruiterNewJobPage() {
           }
           action={
             <Link
-              href="/recruiter/jobs"
-              className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-white"
+              href="/dashboard/recruiter/jobs"
+              className="inline-flex items-center gap-2 text-sm text-white/60 transition hover:text-blue-400"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Jobs
@@ -798,11 +699,13 @@ export default function RecruiterNewJobPage() {
           onSubmit={handleSubmit}
           className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]"
         >
+          {/* Main Form */}
           <div className="space-y-6">
+            {/* Job Information */}
             <SectionCard>
               <div className="mb-6 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ccff00]/10">
-                  <BriefcaseBusiness className="h-5 w-5 text-[#ccff00]" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
+                  <BriefcaseBusiness className="h-5 w-5 text-blue-400" />
                 </div>
 
                 <div>
@@ -865,6 +768,7 @@ export default function RecruiterNewJobPage() {
                   </div>
                 </div>
 
+                {/* Location */}
                 <div>
                   <FieldLabel>Location</FieldLabel>
 
@@ -890,13 +794,14 @@ export default function RecruiterNewJobPage() {
                           }
                         }}
                         disabled={submitting}
-                        className="h-4 w-4 accent-[#ccff00]"
+                        className="h-4 w-4 accent-blue-500"
                       />
                       Remote
                     </label>
                   </div>
                 </div>
 
+                {/* Salary */}
                 <div>
                   <FieldLabel>Salary</FieldLabel>
 
@@ -941,6 +846,7 @@ export default function RecruiterNewJobPage() {
               </div>
             </SectionCard>
 
+            {/* Job Description */}
             <SectionCard>
               <div className="mb-6">
                 <h2 className="text-lg font-semibold text-white">
@@ -998,9 +904,10 @@ export default function RecruiterNewJobPage() {
               </div>
             </SectionCard>
 
+            {/* Submit Buttons */}
             <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <Link
-                href="/recruiter/jobs"
+                href="/dashboard/recruiter/jobs"
                 className={cn(
                   secondaryButton,
                   "inline-flex items-center justify-center"
@@ -1038,11 +945,13 @@ export default function RecruiterNewJobPage() {
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="space-y-6">
+            {/* Visibility */}
             <DashboardCard>
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5">
-                  <Clock className="h-5 w-5 text-white/70" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+                  <Clock className="h-5 w-5 text-blue-400" />
                 </div>
 
                 <div>
@@ -1063,7 +972,7 @@ export default function RecruiterNewJobPage() {
                   className={cn(
                     "w-full rounded-xl border px-4 py-3 text-left transition",
                     jobStatus === "active"
-                      ? "border-[#ccff00]/40 bg-[#ccff00]/10"
+                      ? "border-blue-500/40 bg-blue-500/10"
                       : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
                   )}
                 >
@@ -1073,7 +982,7 @@ export default function RecruiterNewJobPage() {
                     </span>
 
                     {jobStatus === "active" && (
-                      <CheckCircle2 className="h-4 w-4 text-[#ccff00]" />
+                      <CheckCircle2 className="h-4 w-4 text-blue-400" />
                     )}
                   </div>
 
@@ -1089,7 +998,7 @@ export default function RecruiterNewJobPage() {
                   className={cn(
                     "w-full rounded-xl border px-4 py-3 text-left transition",
                     jobStatus === "draft"
-                      ? "border-[#ccff00]/40 bg-[#ccff00]/10"
+                      ? "border-blue-500/40 bg-blue-500/10"
                       : "border-white/10 bg-white/[0.02] hover:bg-white/[0.04]"
                   )}
                 >
@@ -1099,7 +1008,7 @@ export default function RecruiterNewJobPage() {
                     </span>
 
                     {jobStatus === "draft" && (
-                      <CheckCircle2 className="h-4 w-4 text-[#ccff00]" />
+                      <CheckCircle2 className="h-4 w-4 text-blue-400" />
                     )}
                   </div>
 
@@ -1110,10 +1019,11 @@ export default function RecruiterNewJobPage() {
               </div>
             </DashboardCard>
 
+            {/* Free Plan */}
             <DashboardCard>
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ccff00]/10">
-                  <Sparkles className="h-5 w-5 text-[#ccff00]" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10">
+                  <Sparkles className="h-5 w-5 text-blue-400" />
                 </div>
 
                 <div>
@@ -1123,6 +1033,14 @@ export default function RecruiterNewJobPage() {
                     Free recruiter accounts can publish up to 5 active jobs.
                     Premium gives you more publishing capacity.
                   </p>
+
+                  <Link
+                    href="/dashboard/recruiter/billing"
+                    className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-blue-400 transition hover:text-blue-300"
+                  >
+                    Explore Premium
+                    <ArrowLeft className="h-4 w-4 rotate-180" />
+                  </Link>
                 </div>
               </div>
             </DashboardCard>
